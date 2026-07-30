@@ -1,0 +1,21 @@
+# SPM build products
+.build/
+.swiftpm/
+
+# The .app assembled by bundle.sh
+build/
+
+# Xcode (in case a project file is ever added)
+*.xcodeproj
+xcuserdata/
+
+.DS_Store
+
+# Personal notes (work log, design brief) — not for the public repo
+tasks/
+
+# IDE
+.vscode/
+
+# Signing / notarization output from release.sh
+dist/

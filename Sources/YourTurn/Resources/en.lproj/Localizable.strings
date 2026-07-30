@@ -1,0 +1,120 @@
+/* Source language. Keys are the English text itself, so this file is a plain identity
+   mapping — it exists so `en` shows up in Bundle.module.localizations and can win the
+   match for English systems. Add every new key here and in zh-Hant.lproj. */
+
+/* MARK: - Menu bar panel */
+"Rescan" = "Rescan";
+"To resume old work, browse from \"All\"" = "To resume old work, browse from \"All\"";
+"%lld more running" = "%lld more running";
+"All" = "All";
+"Still running — hasn't wrapped up yet." = "Still running — hasn't wrapped up yet.";
+"This session left no summary — Claude only writes one when you step away." = "This session left no summary — Claude only writes one when you step away.";
+
+/* MARK: - Context menu */
+"Switch back to original window" = "Switch back to original window";
+"Open new window to resume" = "Open new window to resume";
+"Copy resume command" = "Copy resume command";
+"Open in %@" = "Open in %@";
+"Reveal in Finder" = "Reveal in Finder";
+"Settings…" = "Settings…";
+"Quit Your Turn" = "Quit Your Turn";
+
+/* MARK: - Relative time */
+"just now" = "just now";
+"%lldm ago" = "%lldm ago";
+"%lldh ago" = "%lldh ago";
+"%lldd ago" = "%lldd ago";
+"%lldw ago" = "%lldw ago";
+
+/* MARK: - Main window */
+/* Symbolic key, not a sentence: it's a DateFormatter pattern, and each language wants a
+   different one (English spells the month, Chinese writes 7月28日). */
+"dateline.format" = "MMMM d  ·  EEEE";
+"By time" = "By time";
+"By project" = "By project";
+"Search sessions…" = "Search sessions…";
+"Scanning…" = "Scanning…";
+"No sessions found" = "No sessions found";
+"No sessions are open right now" = "No sessions are open right now";
+"No sessions match \"%@\"" = "No sessions match \"%@\"";
+"Remove star" = "Remove star";
+"Star to pin to the top" = "Star to pin to the top";
+"Done for now" = "Done for now";
+"%lld more project done for now — resume an old session" = "%lld more project done for now — resume an old session";
+"%lld more projects done for now — resume an old session" = "%lld more projects done for now — resume an old session";
+"%lld resumable" = "%lld resumable";
+"Unknown terminal" = "Unknown terminal";
+"Switch back to %@" = "Switch back to %@";
+"Open a new window to resume" = "Open a new window to resume";
+"Waiting for you: %@" = "Waiting for you: %@";
+"Settings" = "Settings";
+
+/* MARK: - Session */
+"your response" = "your response";
+"Nothing pending — over to you." = "Nothing pending — over to you.";
+"(Untitled)" = "(Untitled)";
+"You" = "You";
+
+/* MARK: - Headline */
+"All wrapped up — nice work today." = "All wrapped up — nice work today.";
+"%lld project running, Claude's still working." = "%lld project running, Claude's still working.";
+"%lld projects running, Claude's still working." = "%lld projects running, Claude's still working.";
+"%lld project has updates, %lld session waiting for you." = "%lld project has updates, %lld session waiting for you.";
+"%lld project has updates, %lld sessions waiting for you." = "%lld project has updates, %lld sessions waiting for you.";
+"%lld projects have updates, %lld session waiting for you." = "%lld projects have updates, %lld session waiting for you.";
+"%lld projects have updates, %lld sessions waiting for you." = "%lld projects have updates, %lld sessions waiting for you.";
+
+/* MARK: - Appearance */
+"Follow System" = "Follow System";
+"Light" = "Light";
+"Dim" = "Dim";
+"Dark" = "Dark";
+"Follow System (currently Dark)" = "Follow System (currently Dark)";
+"Follow System (currently Light)" = "Follow System (currently Light)";
+
+/* MARK: - Settings */
+"Appearance" = "Appearance";
+"Terminal" = "Terminal";
+"Which terminal opens a new window when resuming a closed session." = "Which terminal opens a new window when resuming a closed session.";
+"Editor" = "Editor";
+"Used by the right-click menu's \"Open with…\"." = "Used by the right-click menu's \"Open with…\".";
+"Archive" = "Archive";
+"Archiving is stored only in Your Turn's own data — never written back to ~/.claude." = "Archiving is stored only in Your Turn's own data — never written back to ~/.claude.";
+"Clear" = "Clear";
+"No sessions archived" = "No sessions archived";
+"%lld session archived" = "%lld session archived";
+"%lld sessions archived" = "%lld sessions archived";
+"Starred" = "Starred";
+"Starred projects are pinned to the top of the main window." = "Starred projects are pinned to the top of the main window.";
+"Clear all" = "Clear all";
+"No projects starred" = "No projects starred";
+"%lld project starred" = "%lld project starred";
+"%lld projects starred" = "%lld projects starred";
+"About" = "About";
+"Reads session records from ~/.claude — read-only, never written to." = "Reads session records from ~/.claude — read-only, never written to.";
+
+/* Written out in full rather than interpolating "dark"/"light" into one sentence: a
+   fragment that reads fine in English lands mid-sentence in Chinese, where the wording
+   around it has to change too. */
+"Follows the system's light/dark setting. The system is currently dark." = "Follows the system's light/dark setting. The system is currently dark.";
+"Follows the system's light/dark setting. The system is currently light." = "Follows the system's light/dark setting. The system is currently light.";
+"Cream-paper white — the brightest of the three." = "Cream-paper white — the brightest of the three.";
+"The same cream, dimmed to about 70% brightness. Easier on the eyes over a long session, still dark text on a light background." = "The same cream, dimmed to about 70% brightness. Easier on the eyes over a long session, still dark text on a light background.";
+"Warm black — the night end of the same paper." = "Warm black — the night end of the same paper.";
+
+/* MARK: - Language */
+/* The two actual languages name themselves ("English" / "繁體中文") in code and are
+   deliberately absent here — a language menu has to stay readable to someone who can't
+   read the current UI language. */
+"Language" = "Language";
+"Follows your macOS language. It currently resolves to English." = "Follows your macOS language. It currently resolves to English.";
+"Follows your macOS language. It currently resolves to 繁體中文." = "Follows your macOS language. It currently resolves to 繁體中文.";
+"Overrides your macOS language. The whole app switches over immediately." = "Overrides your macOS language. The whole app switches over immediately.";
+
+/* MARK: - Startup */
+"Startup" = "Startup";
+"On" = "On";
+"Off" = "Off";
+"Opens on its own once you log in. It has no Dock icon, so it just appears in the menu bar." = "Opens on its own once you log in. It has no Dock icon, so it just appears in the menu bar.";
+"macOS has this blocked. Allow \"Your Turn\" under Login Items to switch it back on." = "macOS has this blocked. Allow \"Your Turn\" under Login Items to switch it back on.";
+"Open Login Items" = "Open Login Items";

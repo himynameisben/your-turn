@@ -1,0 +1,4 @@
+/* Shown by macOS the first time "jump back to its window" drives a terminal via Apple Events.
+   Lives here so bundle.sh can copy it into the .app's own Contents/Resources/<lang>.lproj —
+   the system reads this one out of the main bundle, not out of the SPM resource bundle. */
+"NSAppleEventsUsageDescription" = "Your Turn needs to control your terminal to switch you back to the window and tab where a Claude Code session lives.";

@@ -1,0 +1,111 @@
+/* 繁體中文。字串照 CLAUDE.md 的語氣：講人話、不製造壓力。 */
+
+/* MARK: - Menu bar panel */
+"Rescan" = "重新掃描";
+"To resume old work, browse from \"All\"" = "要接續舊的工作，從「全部」翻找";
+"%lld more running" = "另有 %lld 個進行中";
+"All" = "全部";
+"Still running — hasn't wrapped up yet." = "正在跑，這一輪還沒收尾。";
+"This session left no summary — Claude only writes one when you step away." = "這個 session 沒有留下摘要——Claude 只在你離開時才寫。";
+
+/* MARK: - Context menu */
+"Switch back to original window" = "切回原視窗";
+"Open new window to resume" = "開新視窗接續";
+"Copy resume command" = "複製接續指令";
+"Open in %@" = "用 %@ 開啟";
+"Reveal in Finder" = "在 Finder 顯示";
+"Settings…" = "設定…";
+"Quit Your Turn" = "結束 Your Turn";
+
+/* MARK: - Relative time */
+"just now" = "剛剛";
+"%lldm ago" = "%lld 分鐘前";
+"%lldh ago" = "%lld 小時前";
+"%lldd ago" = "%lld 天前";
+"%lldw ago" = "%lld 週前";
+
+/* MARK: - Main window */
+"dateline.format" = "M月d日  ·  EEEE";
+"By time" = "依時間";
+"By project" = "依專案";
+"Search sessions…" = "搜尋 session…";
+"Scanning…" = "掃描中…";
+"No sessions found" = "找不到任何 session";
+"No sessions are open right now" = "目前沒有開著的 session";
+"No sessions match \"%@\"" = "找不到符合「%@」的 session";
+"Remove star" = "取消星號";
+"Star to pin to the top" = "標上星號，排到最上面";
+"Done for now" = "已收工";
+"%lld more project done for now — resume an old session" = "另外 %lld 個專案已收工，可以接續舊的 session";
+"%lld more projects done for now — resume an old session" = "另外 %lld 個專案已收工，可以接續舊的 session";
+"%lld resumable" = "%lld 個可接續";
+"Unknown terminal" = "未知的終端機";
+"Switch back to %@" = "切回 %@";
+"Open a new window to resume" = "開新視窗接續";
+"Waiting for you: %@" = "等你回答：%@";
+"Settings" = "設定";
+
+/* MARK: - Session */
+"your response" = "你的回覆";
+"Nothing pending — over to you." = "沒有待辦，等你下一個指令";
+"(Untitled)" = "（無標題）";
+"You" = "你";
+
+/* MARK: - Headline */
+"All wrapped up — nice work today." = "都收工了，今天辛苦了。";
+/* Chinese has no plural forms: each singular/plural key pair maps to one sentence. */
+"%lld project running, Claude's still working." = "%lld 個專案在跑，Claude 還在忙。";
+"%lld projects running, Claude's still working." = "%lld 個專案在跑，Claude 還在忙。";
+"%lld project has updates, %lld session waiting for you." = "%lld 個專案有進展，%lld 個 session 等你看一眼。";
+"%lld project has updates, %lld sessions waiting for you." = "%lld 個專案有進展，%lld 個 session 等你看一眼。";
+"%lld projects have updates, %lld session waiting for you." = "%lld 個專案有進展，%lld 個 session 等你看一眼。";
+"%lld projects have updates, %lld sessions waiting for you." = "%lld 個專案有進展，%lld 個 session 等你看一眼。";
+
+/* MARK: - Appearance */
+"Follow System" = "跟隨系統";
+"Light" = "淺色";
+"Dim" = "柔和";
+"Dark" = "深色";
+"Follow System (currently Dark)" = "跟隨系統（目前深色）";
+"Follow System (currently Light)" = "跟隨系統（目前淺色）";
+
+/* MARK: - Settings */
+"Appearance" = "外觀";
+"Terminal" = "終端機";
+"Which terminal opens a new window when resuming a closed session." = "接續已經關掉的 session 時，用哪個終端機開新視窗。";
+"Editor" = "編輯器";
+"Used by the right-click menu's \"Open with…\"." = "右鍵選單的「用⋯開啟」會用這個。";
+"Archive" = "封存";
+"Archiving is stored only in Your Turn's own data — never written back to ~/.claude." = "封存只存在 Your Turn 自己的資料夾，不會寫回 ~/.claude。";
+"Clear" = "清除";
+"No sessions archived" = "沒有封存任何 session";
+"%lld session archived" = "已封存 %lld 個 session";
+"%lld sessions archived" = "已封存 %lld 個 session";
+"Starred" = "星號";
+"Starred projects are pinned to the top of the main window." = "標了星號的專案會排在主視窗最上面。";
+"Clear all" = "全部取消";
+"No projects starred" = "沒有標星任何專案";
+"%lld project starred" = "已標星 %lld 個專案";
+"%lld projects starred" = "已標星 %lld 個專案";
+"About" = "關於";
+"Reads session records from ~/.claude — read-only, never written to." = "讀取 ~/.claude 的 session 紀錄，對它只讀不寫。";
+
+"Follows the system's light/dark setting. The system is currently dark." = "跟著系統的淺色／深色走。目前系統是深色。";
+"Follows the system's light/dark setting. The system is currently light." = "跟著系統的淺色／深色走。目前系統是淺色。";
+"Cream-paper white — the brightest of the three." = "米白紙，最亮的一組。";
+"The same cream, dimmed to about 70% brightness. Easier on the eyes over a long session, still dark text on a light background." = "一樣的米白，亮度調到大約七成。長時間看不刺眼，但仍是深字亮底。";
+"Warm black — the night end of the same paper." = "暖黑——同一張紙的夜晚。";
+
+/* MARK: - Language */
+"Language" = "語言";
+"Follows your macOS language. It currently resolves to English." = "跟著 macOS 的語言設定走。目前對應到 English。";
+"Follows your macOS language. It currently resolves to 繁體中文." = "跟著 macOS 的語言設定走。目前對應到繁體中文。";
+"Overrides your macOS language. The whole app switches over immediately." = "蓋過 macOS 的語言設定。整個 app 會立刻換過去。";
+
+/* MARK: - Startup */
+"Startup" = "開機啟動";
+"On" = "開啟";
+"Off" = "關閉";
+"Opens on its own once you log in. It has no Dock icon, so it just appears in the menu bar." = "登入之後自動開啟。它沒有 Dock 圖示，只會出現在選單列。";
+"macOS has this blocked. Allow \"Your Turn\" under Login Items to switch it back on." = "macOS 把它擋掉了。到「登入項目」把 Your Turn 打開才能再啟用。";
+"Open Login Items" = "打開登入項目";
