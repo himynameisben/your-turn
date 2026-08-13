@@ -48,6 +48,9 @@ enum RenderCommand {
             let palette = appearance.theme(system: .light)
             let view = MainWindowPage(
                 store: store,
+                // The session pages never read it; a blank store keeps the scan out of the
+                // session screenshots entirely.
+                stats: StatsStore(),
                 preferences: preferences,
                 mode: .constant(.byProject),
                 query: .constant(""),
@@ -68,6 +71,78 @@ enum RenderCommand {
                 .background(palette.bg)
             write(settings, to: outputDirectory.appendingPathComponent("\(appearance.rawValue)-settings.png"))
         }
+        renderStats(to: outputDirectory, demo: demo, store: store, preferences: preferences)
+    }
+
+    /// Renders the usage tab for each palette.
+    ///
+    /// Renders `MainWindowPage` with the mode pinned rather than some usage-only view, so
+    /// what lands in the PNG is literally the page the user sees, masthead and tab picker
+    /// included. A real scan here would publish this machine's project names and actual
+    /// spend, so `--demo` is not optional for anything that leaves the laptop.
+    private static func renderStats(
+        to directory: URL, demo: Bool, store: SessionStore, preferences: AppPreferences
+    ) {
+        let stats = usageStore(demo: demo, period: .all)
+        print("Usage: \(stats.summary?.requests ?? 0) request(s)")
+
+        for appearance in Appearance.allCases where appearance != .system {
+            let palette = appearance.theme(system: .light)
+            let page = MainWindowPage(
+                store: store,
+                stats: stats,
+                preferences: preferences,
+                mode: .constant(.usage),
+                query: .constant(""),
+                now: Date()
+            )
+            .frame(width: 1000, alignment: .topLeading)
+            .themed(appearance)
+            .environment(\.isOffscreenRender, true)
+            .background(palette.bg)
+            write(page, to: directory.appendingPathComponent("\(appearance.rawValue)-usage.png"))
+        }
+
+        // One extra frame with a month selected. The filtered layout differs in three places
+        // — the stepper appears, the three tiles change meaning, and the heatmap dims
+        // everything outside the selection — and none of that is visible in a screenshot of
+        // the default state. Light palette only: it's a verification frame, not a published one.
+        //
+        // A second store rather than moving this one's period: `period`'s recompute runs off
+        // the main actor and `ImageRenderer` won't wait for it, so the filter has to be in
+        // place before the data lands.
+        let filteredStats = usageStore(demo: demo, period: UsagePeriod(mode: .month, anchor: Date()))
+        let filtered = MainWindowPage(
+            store: store,
+            stats: filteredStats,
+            preferences: preferences,
+            mode: .constant(.usage),
+            query: .constant(""),
+            now: Date()
+        )
+        .frame(width: 1000, alignment: .topLeading)
+        .themed(.light)
+        .environment(\.isOffscreenRender, true)
+        .background(Theme.paper.bg)
+        write(filtered, to: directory.appendingPathComponent("light-usage-month.png"))
+    }
+
+    /// The period has to be set before the data arrives — `loadDemo` aggregates on the spot,
+    /// and a later change would recompute off the main actor, which `ImageRenderer` won't
+    /// wait for.
+    private static func usageStore(demo: Bool, period: UsagePeriod) -> StatsStore {
+        let stats = StatsStore()
+        stats.period = period
+        guard !demo else {
+            stats.loadDemo(DemoData.usage(now: Date()))
+            return stats
+        }
+        var done = false
+        Task { await stats.load(); done = true }
+        while !done {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+        }
+        return stats
     }
 
     private static func write(_ view: some View, to path: URL) {
@@ -180,6 +255,91 @@ private enum DemoData {
             ]),
         ]
     }
+
+    // MARK: - Usage
+
+    /// Invented usage for the stats page.
+    ///
+    /// Builds real `UsageRecord`s and hands them to the real `UsageStats.build` with the real
+    /// bundled price table, rather than hand-writing the totals — same principle as the
+    /// session demo running through `SummaryText`: a screenshot that bypasses the pipeline
+    /// stops being evidence that the pipeline works.
+    ///
+    /// The sequence is seeded, so re-rendering produces the identical picture and a diff of
+    /// two screenshots only shows what actually changed in the layout.
+    static func usage(now: Date) -> UsageScanner.Result {
+        var seed: UInt64 = 20_260_812
+        func roll(_ upper: Int) -> Int {
+            seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return Int((seed >> 33) % UInt64(max(upper, 1)))
+        }
+
+        // Weighted so one project clearly leads — a flat distribution would hide whether the
+        // ranked bars actually rank anything.
+        let projects = [("weather-cli", 5), ("recipe-box", 3), ("docs-site", 2), ("ledger", 1)]
+        let models = [("claude-opus-5", 6), ("claude-sonnet-5", 3), ("claude-fable-5", 1)]
+        let weighted: [(String, String)] = projects.flatMap { project, weight in
+            (0..<weight).map { _ in project }
+        }.enumerated().map { index, project in
+            let pool = models.flatMap { model, weight in (0..<weight).map { _ in model } }
+            return (project, pool[index % pool.count])
+        }
+
+        let calendar = Calendar.current
+        var scan = UsageScanner.Result()
+        // 18 weeks, not 30 days: the heatmap draws a 26-week grid, and a month of data in it
+        // shows neither the month labels nor what a quiet stretch looks like.
+        for dayOffset in (0..<126).reversed() {
+            guard let day = calendar.date(byAdding: .day, value: -dayOffset, to: now) else { continue }
+            // Two quiet days a week, so the chart has the gaps a real month has.
+            if calendar.component(.weekday, from: day) == 1, roll(3) > 0 { continue }
+
+            let sessions = 1 + roll(3)
+            for session in 0..<sessions {
+                let (project, model) = weighted[roll(weighted.count)]
+                let sessionId = "demo-\(dayOffset)-\(session)"
+                let start = 9 + roll(10)
+                for request in 0..<(8 + roll(24)) {
+                    let hour = min(23, start + request / 6)
+                    guard let stamp = calendar.date(
+                        bySettingHour: hour, minute: roll(60), second: roll(60), of: day
+                    ) else { continue }
+                    // Proportions taken from the real measurement, because the whole point of
+                    // the "where it goes" section is that these four buckets are wildly
+                    // different sizes: cache reads run ~46x cache writes and ~185x output.
+                    var tokens = TokenCounts()
+                    tokens.input = 2 + roll(40)
+                    tokens.output = 200 + roll(1_600)
+                    tokens.cacheRead = 90_000 + roll(280_000)
+                    tokens.cacheWrite5m = roll(3_000)
+                    tokens.cacheWrite1h = roll(6_000)
+                    scan.records.append(UsageRecord(
+                        requestId: "demo-\(dayOffset)-\(session)-\(request)",
+                        timestamp: stamp,
+                        sessionId: sessionId,
+                        projectPath: "/Users/you/code/\(project)",
+                        isSubagent: roll(4) == 0,
+                        segments: [UsageSegment(model: model, tokens: tokens)]
+                    ))
+                    // One turn per handful of requests, matching the measured ratio — a turn
+                    // is one thing you asked for, not one API call.
+                    if request % 6 == 5 {
+                        scan.turns.append(TurnRecord(
+                            sessionId: sessionId,
+                            timestamp: stamp.addingTimeInterval(Double(60 + roll(400))),
+                            duration: Double(240 + roll(1_600)),
+                            projectPath: "/Users/you/code/\(project)"
+                        ))
+                    }
+                }
+            }
+        }
+        scan.records.sort { $0.timestamp < $1.timestamp }
+        scan.turns.sort { $0.timestamp < $1.timestamp }
+        return scan
+    }
+
+    // MARK: - Sessions
 
     /// `item` can't build its `Session` until it knows the project path, so it hands back a
     /// closure and the group fills the path in.

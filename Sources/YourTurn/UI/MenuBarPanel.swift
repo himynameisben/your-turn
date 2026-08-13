@@ -31,6 +31,7 @@ private enum Panel {
 struct MenuBarPanel: View {
     let store: SessionStore
     let preferences: AppPreferences
+    let navigation: Navigation
 
     @Environment(\.openWindow) private var openWindow
     @Environment(\.theme) private var theme
@@ -125,7 +126,7 @@ struct MenuBarPanel: View {
                 .buttonStyle(.plain)
                 .font(Theme.meta)
                 .foregroundStyle(theme.muted)
-            SettingsMenu()
+            SettingsMenu(navigation: navigation)
                 .padding(.leading, 14)
         }
         .padding(.leading, Panel.inset)
@@ -272,10 +273,18 @@ struct SessionMenu: View {
 /// Actions only. All preferences live in the settings window — scattering them
 /// across two places would leave you unsure where to change what.
 struct SettingsMenu: View {
+    let navigation: Navigation
+
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Menu {
+            // Opens the main window *onto* the usage tab — which is the whole reason the
+            // selected page lives in `Navigation` rather than in the window's own `@State`.
+            Button(L("Usage")) {
+                navigation.mode = .usage
+                openWindow(id: MainWindow.id)
+            }
             Button(L("Settings…")) { openWindow(id: SettingsWindow.id) }
                 .keyboardShortcut(",", modifiers: .command)
             Divider()

@@ -35,10 +35,12 @@ that directory is wiped.
 | `--dump` | Print every session: state, times, your last prompt / Claude's next step, jump target, stats |
 | `--triage` | Cross-check how far "terminal still open" and "has pending work" diverge |
 | `--next` | Quality stats for next-step extraction (pending / clear / unknown ratio) |
+| `--cost [--no-cache] [--refresh-prices]` | Print the usage pipeline: scan timings, dedup counts, total spend, per model / per project / per day, rhythm. `--no-cache` forces a cold scan so both paths can be compared; `--refresh-prices` fires the LiteLLM download the window otherwise only attempts once a day |
 | `--login-item [on\|off]` | Read or flip the "start at login" registration. Only meaningful from the binary **inside** the .app (`/Applications/YourTurn.app/Contents/MacOS/YourTurn`) — `SMAppService` answers for the bundle it runs in, and there's no other way to check: these registrations don't show up in AppleScript's login-item list, and the system's database needs root |
-| `--render <dir> [--demo]` | Offscreen-render the main window and settings page to PNGs in every palette. `--demo` renders invented sessions instead of the real scan — **required for anything published**, since a real scan puts your own titles, prompts and summaries in the picture |
+| `--render <dir> [--demo]` | Offscreen-render the main window (session tabs **and** the Usage tab, via `MainWindowPage` with the mode pinned, so the PNG is literally the page a user sees) plus the settings page, in every palette. `--demo` renders invented sessions and invented usage instead of the real scan — **required for anything published**, since a real scan puts your own titles, prompts, summaries and actual spend in the picture |
 
-**Data-layer changes: run `--dump`. Layout changes: run `--render`.** Layout cannot
+**Session-layer changes: run `--dump`. Usage-layer changes: run `--cost`. Layout
+changes: run `--render`.** Layout cannot
 be eyeballed — `--render` is the only way to actually see the result
 (`LSUIElement` windows can't be captured reliably with `screencapture`).
 
@@ -60,19 +62,32 @@ Sources/YourTurn/
 │   ├── SummaryText.swift       extracts the "next step" sentence from away_summary
 │   ├── AppPreferences.swift    terminal / editor / appearance / language preferences
 │   └── LaunchAtLogin.swift     start-at-login, via SMAppService — state lives in macOS, not UserDefaults
+├── Stats/                      the second pipeline: what it cost, how the days went
+│   ├── UsageScanner.swift      full-file scan incl. subagents/, byte prefilter + concurrentPerform
+│   ├── UsageRecord.swift       one deduplicated request, split into per-model segments
+│   ├── UsageCache.swift        per-file cache keyed on (size, mtime) — 1.5s cold → 36ms warm
+│   ├── Pricing.swift           per-iteration, per-model pricing; unknown model → nil, never 0
+│   ├── PriceTable.swift        bundled snapshot + optional LiteLLM refresh
+│   ├── ProjectRoot.swift       rolls a cwd up to its git repository
+│   ├── UsageStats.swift        aggregation: by day / model / project, plus rhythm
+│   ├── StatsFormat.swift       $ / token / duration formatting, shared with the CLI
+│   ├── StatsStore.swift        @Observable, scans when the usage window opens
+│   └── CostCommand.swift       --cost
 ├── Actions/
 │   ├── SessionActions.swift    jump back to the original window, resume, open editor (AppleScript)
 │   ├── PinStore.swift          starred projects (UserDefaults key remains pinnedProjects)
 │   └── ArchiveStore.swift      archiving
 ├── UI/
 │   ├── MenuBarPanel.swift      menu bar panel, one line per session
-│   ├── MainWindow.swift        main window, three lines per row (title / You / Claude)
+│   ├── MainWindow.swift        main window: three tabs, and `Navigation` (which tab is up)
+│   ├── UsagePage.swift         the Usage tab's sections + its masthead wording
 │   ├── SettingsWindow.swift    settings
 │   ├── Theme.swift             three palettes + type scale, passed via the \.theme environment value
 │   ├── Components.swift        PillPicker, activation policy
 │   ├── Localization.swift      the `L("…")` helper, `AppLanguage`, and the live-switch scope
 │   └── RenderCommand.swift     implementation of --render, plus the --demo fake sessions
 └── Resources/
+    ├── prices.json             trimmed LiteLLM snapshot (26 Anthropic models, 4.3KB)
     ├── en.lproj/               Localizable.strings (source language) + InfoPlist.strings
     └── zh-Hant.lproj/          the same two files, translated
 
@@ -86,6 +101,11 @@ docs/RELEASING.md               signing & notarization playbook
 | `projects/<slug>/<uuid>.jsonl` | the session itself: `ai-title`, `away_summary`, `last-prompt`, `cwd`, `gitBranch`, per-record `timestamp` |
 | `sessions/<pid>.json` | **live registry**: `pid` ↔ `sessionId`, plus Claude's self-reported `status` (busy/idle/waiting) and `waitingFor` |
 | `ide/<port>.lock` | SSE port → VS Code workspace path |
+| `projects/<slug>/<uuid>/subagents/agent-*.jsonl` | **usage only**: subagent transcripts. Invisible to the session scanner by design, mandatory for the cost scanner |
+
+Usage additionally needs `message.usage` (all five token buckets plus `iterations`),
+`requestId`, and `system/turn_duration`'s `durationMs`. There is **no cost field in the
+transcript** — the old `costUSD` is gone — so the money is computed, never read.
 
 Don't scan `projects/` recursively: one level deeper, `<uuid>/subagents/agent-*.jsonl`
 holds subagent transcripts that would balloon the session count with false entries.
@@ -122,6 +142,110 @@ comments in the corresponding file (they carry the numbers).
   the settings window appears.
 - **Palettes are data, not light/dark** — three palettes flow down via the `\.theme`
   environment value; views never check `colorScheme` themselves.
+- **A pinned Dock icon needs `applicationShouldHandleReopen`** — `LSUIElement` means there's
+  no Dock icon of our own; one only appears while a window is open, because
+  `managesActivationPolicy()` flips the policy to `.regular`. Anyone who then picks "Keep in
+  Dock" has a permanent icon for an app that usually has no windows, and clicking it does
+  **nothing** by default: the app is already running, so there is nothing to launch. That
+  hook is the only one that fires. `AppDelegate` handles it and calls `openWindow`, which it
+  gets handed by the menu bar's label — measured: that label's `onAppear` fires once at
+  launch, before any window exists, and it's the one piece of UI alive for the whole session
+  (both windows can close, and the panel is only built when the menu is opened). Verified by
+  `lsappinfo`: `UIElement` with no window → reopen → `Foreground`.
+- **Every launch opens the window, login included** — one rule, no exceptions, chosen for
+  consistency: the same gesture must not depend on whether the app happens to already be
+  running, which is state the user can't see. The alternative (a window on a click but not at
+  login) needs the app to tell those apart, and macOS only offers
+  `NSApplicationLaunchIsDefaultLaunchKey` for it — whose click side measures `true`, but whose
+  login side can't be reproduced without an actual logout, since `launchctl kickstart` refuses
+  on `SMAppService` jobs. A rule that's right most of the time and unverifiable the rest is
+  worth less than one that always holds. Reverting to "menu bar icon only on launch" is
+  deleting the `claimLaunchWindow()` call in `MenuBarLabel`.
+- **`claimLaunchWindow()` is a per-process one-shot, and has to be** — it's called from the
+  menu bar label's `onAppear`, and that label's body re-evaluates on every scan as the badge
+  count changes. Without the latch, "open the window at launch" would degrade into "open the
+  window whenever a session changes state".
+
+### The usage pipeline is a second pipeline, on purpose
+
+Cost reconstruction disagrees with the session scanner on all three of the decisions
+above, so `Stats/` never touches `Scanner/`. Verified end to end against `ccusage`
+restricted to Claude models: **$6,193 vs $6,176 — 0.27%**, and per model +0.0%.
+
+- **Read whole files, and descend into `subagents/`** — the exact opposite of both
+  session-scanner rules, and both reversals are required. Measured: subagent
+  transcripts hold 10,183 requests / 1.54G tokens, about a quarter of everything;
+  skipping them undercounts the bill by that much. Cost: 594 files / 1.0GB in **1.5s**
+  (release build, `concurrentPerform`), against 4.05s for the same work single-threaded.
+- **`UsageCache` is what makes it affordable** — keyed on `(size, mtime)`, storing each
+  file's parsed records. Warm rescan measured at **36ms**. Deliberately *not* resuming
+  from a stored byte offset: Claude Code rewrites tail metadata records, so an offset
+  can point into rewritten bytes and double-count money. A changed file is re-read whole
+  (46MB worst case ≈ 150ms) and only ever for sessions you're actually using.
+- **Deduplicate by `requestId`, and keep the row with the most output** — measured 51%
+  of rows are duplicates, so not deduplicating nearly doubles the total. Which row wins
+  matters too, and the source research got this wrong: it claims the rows are identical.
+  Measured here, **16.5% of requests have `output_tokens` growing across their rows**
+  (one goes 2 → 14,812) because the rows are progressive snapshots of a streaming
+  response. Keeping the first undercounts output by 15% on `claude-opus-5` and **67% on
+  `claude-sonnet-5`**. Input and cache counts are fixed at request start and really are
+  identical — output is the only field that drifts.
+- **Price per iteration, each at its own model** — when `usage.iterations` exists, the
+  top-level `usage` silently omits `advisor_message` entries, which often ran on a
+  different model. Rare (33 of 36,489 requests) but individually up to 92% off.
+- **An unpriced model is `nil`, never `$0`** — measured 129 `<synthetic>` records. Both
+  the CLI and the window name them and exclude them from the total. Quietly pricing
+  unknown tokens at zero is the one failure an accounting tool can't come back from.
+- **Group projects by git repository, not by folder name** — measured 126 distinct `cwd`
+  values for 36 real projects, and 19 folder names covering more than one directory
+  (three unrelated projects each have a `backend`). Keying on the name both fragments one
+  project across three bars and merges three projects into one. `SessionResolver` still
+  groups by exact `cwd` — that's what picks the right window to jump to.
+- **The Usage tab scans on arrival, not on a timer** — `MainWindowPage` fires
+  `StatsStore.loadIfNeeded()` when you switch to it, and that skips anything scanned in the
+  last minute, so flipping tabs never costs the 30-second session refresh anything. The tab
+  is deliberately not the default and its choice isn't persisted: the inbox is the product,
+  and opening onto a spend page every morning would turn Your Turn into the monitor it was
+  written not to be.
+- **Which tab is showing lives in `Navigation`, not `@State`** — the menu bar's "Usage" item
+  has to open the window *onto* that tab, and `.localized()` re-ids the whole subtree on a
+  language switch, which would otherwise bounce you back to the session list mid-read.
+- **The search field on the Usage tab is faded and disabled, not removed** — taking it out
+  of the stack pulls the tab picker up by the height of a text field, sliding the control
+  you just clicked out from under the cursor.
+
+### The heatmap and the period filter
+
+- **The heatmap is keyed on tokens, never dollars** — the squares encode *effort*, and
+  pricing them would make the same day's work change shade whenever a model's rate moves or
+  you switch from Opus to Haiku. Every dollar figure on the page lives outside the grid.
+- **Quartiles, not a linear scale** — measured spread is 200–500M tokens a day with real
+  outliers; on a linear ramp one huge day paints everything else in the palest shade. Same
+  reason GitHub's graph isn't linear either.
+- **A fixed 26-week grid, not one that grows with your history** — 14pt cells + 3pt gaps ×
+  26 = 442pt, plus a 32pt weekday gutter. The window's 720pt minimum leaves 492pt of content
+  once the page gutter and inset are out, so it fills the row at the narrowest size and never
+  scrolls sideways. A grid sized to the data would resize the whole row every Monday. Days
+  before you first ran Claude Code really did cost nothing, so drawing them empty is accurate.
+- **The heatmap draws `overall`; everything else draws `summary`** — it's the filter's
+  control surface (click a square to select its month or week, unselected weeks fade to 0.28),
+  and a navigator that only shows where you already are can't navigate.
+- **Filtering re-aggregates, it doesn't filter `byDay`** — a month's project ranking is a
+  different question from the sum of its days, so `UsageStats.build` takes a range and
+  `byProject` / `byModel` / `rhythm` are rebuilt inside it. The scan is retained in
+  `StatsStore`, so switching months costs one in-memory pass and no disk access. It runs off
+  the main actor and cancels its predecessor: holding an arrow down steps through months
+  faster than a 37,000-record pass finishes, and every month in between is already stale.
+- **The three tiles change meaning under a filter** — today / this week / this month answers
+  "how am I doing right now", which is not a question March has. Filtered, they become
+  total / per active day / busiest day, and "per active day" divides by the days you actually
+  worked: a week's spend over 7 calendar days describes nobody's week.
+- **`--render` emits an extra `light-usage-month.png`** — the filtered layout differs in
+  three places at once (the stepper appears, the tiles change, the grid dims), and none of it
+  shows up in a screenshot of the default state. `loadDemo` takes a scan rather than a
+  finished summary so the demo runs through the real pricing, aggregation **and** filter.
+- **`turn_duration.messageCount` is unused** — measured average 489.6 per turn, which
+  can't mean "messages in this turn". Not shown until someone pins down what it is.
 
 ### Three `ImageRenderer` pitfalls (for `--render`)
 
@@ -191,12 +315,19 @@ English placeholder sitting inside a Chinese window is the more visible defect.
   `.lproj` name back from `preferredLocalizations` — SwiftPM copies `zh-Hant.lproj` out
   lowercased as `zh-hant.lproj`.
 
-**Verifying:** `--render <dir> --demo` for English, the same command plus
-`-AppleLanguages '(zh-Hant)'` to exercise the system-language path. To exercise the *override*
-instead, append `-language zh-Hant` — UserDefaults' argument domain feeds the preference
-directly without touching the real one on disk, which is the only way to prove the setting
-works rather than the system language. `docs/screenshots/` stays English (rendered with the
-preference left on Follow System, so the pill shown is the default a new user sees).
+**Verifying:** `--render <dir> --demo -language <tag>` is the reliable form —  UserDefaults'
+argument domain feeds `AppPreferences.language` directly, without touching the real setting on
+disk, which is also the only way to prove the *override* works rather than the system language.
+`-AppleLanguages '(…)'` exercises the system-language path instead, but **it can't override a
+stored preference**: once Settings → Language is set to anything but Follow System, that wins,
+and a machine with the preference pinned to zh-Hant renders Chinese no matter what
+`-AppleLanguages` says.
+
+`docs/screenshots/` stays English. The main-window and usage shots are rendered with
+`-language en`; the `*-settings.png` ones are **deliberately not regenerated that way**,
+because the language pill would then show "English" selected instead of the "Follow System"
+a new user actually sees. Regenerate those only on a machine whose system language is English
+and whose preference is still Follow System.
 
 ## Conventions
 

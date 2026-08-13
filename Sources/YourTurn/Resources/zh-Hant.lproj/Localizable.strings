@@ -109,3 +109,68 @@
 "Opens on its own once you log in. It has no Dock icon, so it just appears in the menu bar." = "登入之後自動開啟。它沒有 Dock 圖示，只會出現在選單列。";
 "macOS has this blocked. Allow \"Your Turn\" under Login Items to switch it back on." = "macOS 把它擋掉了。到「登入項目」把 Your Turn 打開才能再啟用。";
 "Open Login Items" = "打開登入項目";
+
+/* MARK: - Usage window */
+"Usage" = "用量";
+"USAGE" = "用量";
+"stats.range.format" = "M月d日";
+"Reading your transcripts…" = "正在讀取對話紀錄…";
+"Adding it up…" = "統計中…";
+"No usage recorded yet" = "還沒有用量紀錄";
+"%@ across %lld project." = "%@，來自 %lld 個專案。";
+"%@ across %lld projects." = "%@，來自 %lld 個專案。";
+
+"Recently" = "近期";
+"Today" = "今天";
+"This week" = "本週";
+"This month" = "本月";
+"%@ tokens · %lld requests" = "%@ tokens · %lld 次請求";
+
+"Each day" = "每日";
+"peak %@" = "最高 %@";
+
+"Projects" = "專案";
+"Models" = "模型";
+"%@ of requests came from subagents." = "其中 %@ 的請求來自 subagent。";
+
+/* MARK: - Usage: where the money goes */
+"Where it goes" = "花在哪";
+"of tokens" = "佔 token";
+"of cost" = "佔金額";
+"cache read" = "快取讀取";
+"cache write" = "快取寫入";
+"input" = "輸入";
+"output" = "輸出";
+
+/* MARK: - Usage: rhythm */
+"Rhythm" = "節奏";
+"You waited" = "你等 Claude";
+"Claude waited" = "Claude 等你";
+"A turn takes" = "平均一輪";
+"across %lld turns" = "共 %lld 輪";
+"typically %@ at a time" = "通常一次 %@";
+"busiest at %lld:00" = "%lld 點最忙";
+
+/* MARK: - Usage: provenance */
+"Estimated from your own transcripts against a public price table (%@). API-equivalent, not a subscription bill." = "依你自己的對話紀錄，對照公開價格表（%@）估算。等同 API 計價，不是訂閱制帳單。";
+"%lld requests ran on a model with no public price (%@) and are left out of the total." = "有 %lld 次請求跑在查不到公開價格的模型上（%@），未計入總額。";
+
+/* MARK: - Usage: period filter */
+"Period" = "期間";
+"All time" = "全部";
+"Month" = "月";
+"Week" = "週";
+"stats.month.format" = "yyyy年M月";
+"Total" = "總計";
+"Per active day" = "每個工作日";
+"Busiest day" = "最忙的一天";
+"Nothing recorded in this period." = "這段期間沒有紀錄。";
+
+/* MARK: - Usage: heatmap */
+"stats.monthLabel.format" = "M月";
+"Less" = "少";
+"More" = "多";
+"%@ tokens over %lld active days" = "%@ tokens，橫跨 %lld 個工作日";
+"%@ · nothing" = "%@ · 沒有用量";
+"%@ · %@ tokens · %@" = "%@ · %@ tokens · %@";
+"Totals" = "合計";

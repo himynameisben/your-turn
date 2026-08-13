@@ -75,24 +75,7 @@ enum JSONLTailReader {
         return result
     }
 
-    /// Measured format is `2026-07-27T04:02:58.865Z` (with milliseconds). Still keeping a
-    /// fallback parser without a fractional part: the format is Claude Code's internal one
-    /// and isn't guaranteed to write milliseconds in every version.
-    ///
-    /// `nonisolated(unsafe)`: scanning runs on `concurrentPerform`, so multiple threads share
-    /// the same formatter. `date(from:)` itself is thread-safe (Foundation documents this
-    /// explicitly) — the compiler just can't prove it; creating a new formatter per call was
-    /// measured to be an order of magnitude slower.
-    private nonisolated(unsafe) static let isoWithFraction: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
-    private nonisolated(unsafe) static let iso = ISO8601DateFormatter()
-
-    private static func parseTimestamp(_ s: String) -> Date? {
-        isoWithFraction.date(from: s) ?? iso.date(from: s)
-    }
+    private static func parseTimestamp(_ s: String) -> Date? { ISOTimestamp.parse(s) }
 
     /// Using JSONSerialization instead of Codable: JSONL is Claude Code's internal format
     /// (currently v2.1.220) and field types may change across versions. `as? String` naturally
