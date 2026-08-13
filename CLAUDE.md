@@ -38,7 +38,7 @@ that directory is wiped.
 | `--cost [--no-cache] [--refresh-prices]` | Print the usage pipeline: scan timings, dedup counts, total spend, per model / per project / per day, rhythm. `--no-cache` forces a cold scan so both paths can be compared; `--refresh-prices` fires the LiteLLM download the window otherwise only attempts once a day |
 | `--login-item [on\|off]` | Read or flip the "start at login" registration. Only meaningful from the binary **inside** the .app (`/Applications/YourTurn.app/Contents/MacOS/YourTurn`) — `SMAppService` answers for the bundle it runs in, and there's no other way to check: these registrations don't show up in AppleScript's login-item list, and the system's database needs root |
 | `--update-check` | Print the running version, GitHub's latest release, the verdict, and the version-ordering table (including the two pairs a string comparison gets wrong). Always fetches, ignoring the daily throttle. Also prints what the **app** last stored and how that resolves — the only way to see whether the launch-time check fired, since a machine that's up to date has no UI at all. Seed `updateCheckLatestVersion` / `updateCheckLatestPage` in UserDefaults to exercise the notice without publishing a release |
-| `--render <dir> [--demo]` | Offscreen-render the main window (session tabs **and** the Usage tab, via `MainWindowPage` with the mode pinned, so the PNG is literally the page a user sees) plus the settings page, in every palette. `--demo` renders invented sessions and invented usage instead of the real scan — **required for anything published**, since a real scan puts your own titles, prompts, summaries and actual spend in the picture |
+| `--render <dir> [--demo]` | Offscreen-render the main window in every palette — all four tabs via `MainWindowPage` with the mode pinned, so each PNG is literally the page a user sees — plus `light-narrow.png` (the 720pt minimum width), the update sheet, and the menu bar panel's footer. `--demo` renders invented sessions and invented usage instead of the real scan — **required for anything published**, since a real scan puts your own titles, prompts, summaries and actual spend in the picture |
 
 **Session-layer changes: run `--dump`. Usage-layer changes: run `--cost`. Update-layer
 changes: run `--update-check`. Layout changes: run `--render`.** Layout cannot
@@ -81,11 +81,11 @@ Sources/YourTurn/
 │   └── ArchiveStore.swift      archiving
 ├── UI/
 │   ├── MenuBarPanel.swift      menu bar panel, one line per session
-│   ├── MainWindow.swift        main window: three tabs, and `Navigation` (which tab is up)
+│   ├── MainWindow.swift        main window: four tabs, and `Navigation` (which tab is up)
 │   ├── UsagePage.swift         the Usage tab's sections + its masthead wording
-│   ├── SettingsWindow.swift    settings
+│   ├── SettingsPage.swift      the settings tab's rows — a page in the main window, not a window
 │   ├── Theme.swift             three palettes + type scale, passed via the \.theme environment value
-│   ├── Components.swift        PillPicker, activation policy
+│   ├── Components.swift        PillPicker (never compresses), activation policy
 │   ├── UpdateViews.swift       the amber `UpdateBadge` and the one `UpdateSheet` it opens
 │   ├── Localization.swift      the `L("…")` helper, `AppLanguage`, and the live-switch scope
 │   └── RenderCommand.swift     implementation of --render, plus the --demo fake sessions
@@ -142,7 +142,7 @@ comments in the corresponding file (they carry the numbers).
 - **Start at login keeps no UserDefaults copy** — `SMAppService` owns that state, and the
   user can switch it off in System Settings without the app hearing about it; a cached
   `true` would then contradict macOS. Read `status` every time, and re-read it whenever
-  the settings window appears.
+  the settings tab appears.
 - **The update check points at a release, it never installs one** — the standard answer is
   Sparkle, which is a third-party framework, an appcast, a second signing key and an installer
   helper. What's actually missing without one is much smaller: nobody quits a menu bar app, so
@@ -256,9 +256,21 @@ restricted to Claude models: **$6,193 vs $6,176 — 0.27%**, and per model +0.0%
 - **Which tab is showing lives in `Navigation`, not `@State`** — the menu bar's "Usage" item
   has to open the window *onto* that tab, and `.localized()` re-ids the whole subtree on a
   language switch, which would otherwise bounce you back to the session list mid-read.
-- **The search field on the Usage tab is faded and disabled, not removed** — taking it out
-  of the stack pulls the tab picker up by the height of a text field, sliding the control
-  you just clicked out from under the cursor.
+- **The search field on the Usage and Settings tabs is faded and disabled, not removed** —
+  taking it out of the stack pulls the tab picker up by the height of a text field, sliding the
+  control you just clicked out from under the cursor.
+- **Settings is a tab, not a window** — an app that lives in the menu bar and usually has no
+  windows at all shouldn't answer a click by opening a second one. `Cmd-,` and the "…" menu's
+  "Settings…" now set `Navigation.mode` and open the main window, the gear button is gone (two
+  controls opening the same page, side by side, is one too many), and `SettingRow`'s label column
+  went from 78pt to `Theme.gutter`, so all four tabs hang off one spine. The notes under each row
+  are capped at 420pt: the old 560pt window enforced a readable measure by accident, and widening
+  the page removed the constraint without removing the reason for it.
+- **`PillPicker` and `UpdateBadge` never compress** — measured at the window's 720pt minimum with
+  four tabs: the pills truncated to "By…", "By p…", "Us…", "Sett…", and once they were fixed the
+  badge degraded through "Up…" to a bare arrow. Both carry `.fixedSize()`. The headline is the
+  only thing in that row that may give, and it does — four lines at 720pt, two at the 860pt
+  default. `--render` emits `light-narrow.png` at exactly 720 so that stays visible.
 
 ### The heatmap and the period filter
 
@@ -313,8 +325,8 @@ language by default. Anything else falls back to English.
 `AppPreferences.language` and pushed into `Localization.override`, which recomputes the
 `.lproj` bundle on the spot — CFBundle reads the *system's* language list, so an override can
 only work because `Localization` does the match itself. Switching is live: `L()` is a plain
-function, so no view depends on it, and `.localized(preferences)` (applied at the root of all
-three scenes) reads the `@Observable` preference and re-`id`s the subtree, which is the one
+function, so no view depends on it, and `.localized(preferences)` (applied at the root of both
+scenes) reads the `@Observable` preference and re-`id`s the subtree, which is the one
 lever that re-runs every `body` underneath. `.managesActivationPolicy()` sits *outside* that
 scope on purpose — its open/close counter must not read the rebuild as "the last window
 closed". Cost: `@State` below the scope resets (the main window's search text and grouping).

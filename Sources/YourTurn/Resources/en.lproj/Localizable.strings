@@ -48,6 +48,8 @@
 "Open a new window to resume" = "Open a new window to resume";
 "Waiting for you: %@" = "Waiting for you: %@";
 "Settings" = "Settings";
+"SETTINGS" = "SETTINGS";
+"How Your Turn behaves." = "How Your Turn behaves.";
 
 /* MARK: - Session */
 "your response" = "your response";

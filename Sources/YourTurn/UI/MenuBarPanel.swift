@@ -298,8 +298,11 @@ struct SettingsMenu: View {
                 navigation.mode = .usage
                 openWindow(id: MainWindow.id)
             }
-            Button(L("Settings…")) { openWindow(id: SettingsWindow.id) }
-                .keyboardShortcut(",", modifiers: .command)
+            Button(L("Settings…")) {
+                navigation.mode = .settings
+                openWindow(id: MainWindow.id)
+            }
+            .keyboardShortcut(",", modifiers: .command)
             Divider()
             Button(L("Quit Your Turn")) { NSApplication.shared.terminate(nil) }
         } label: {

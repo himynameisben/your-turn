@@ -31,6 +31,11 @@ struct PillPicker<Option: Identifiable & Hashable>: View {
         }
         .padding(2)
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.rule, lineWidth: 1))
+        // Never compresses. Measured at the window's minimum width with four tabs: without this
+        // the labels truncate to "By…", "By p…", "Us…", "Sett…" — a segmented control whose
+        // segments can't be read is worse than a headline that wraps one line further, and the
+        // headline is the only other thing in that row that can give.
+        .fixedSize()
     }
 }
 

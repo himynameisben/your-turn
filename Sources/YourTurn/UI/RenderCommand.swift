@@ -80,13 +80,48 @@ enum RenderCommand {
             write(view, to: outputDirectory.appendingPathComponent("\(appearance.rawValue).png"))
 
             preferences.appearance = appearance
-            let settings = SettingsPage(store: store, preferences: preferences, updates: updates)
-                .frame(width: 560, alignment: .topLeading)
-                .themed(appearance)
-                .environment(\.isOffscreenRender, true)
-                .background(palette.bg)
+            // Through `MainWindowPage` with the mode pinned, same as the usage tab: settings is a
+            // tab now, so a frame of `SettingsPage` on its own would leave out the masthead and
+            // the picker that are half of what changed.
+            //
+            // This is the one page rendered with a live `updates`: the About row's badge is
+            // otherwise unrenderable, and these frames aren't published — see `docs/RELEASING`.
+            let settings = MainWindowPage(
+                store: store,
+                stats: StatsStore(),
+                preferences: preferences,
+                updates: updates,
+                mode: .constant(.settings),
+                query: .constant(""),
+                now: Date(),
+                showingUpdate: .constant(false)
+            )
+            .frame(width: 1000, alignment: .topLeading)
+            .themed(appearance)
+            .environment(\.isOffscreenRender, true)
+            .background(palette.bg)
             write(settings, to: outputDirectory.appendingPathComponent("\(appearance.rawValue)-settings.png"))
         }
+        // One frame at the window's 720pt minimum, with everything the masthead can hold up at
+        // once: the update badge, the search field, and all four tab pills. That right-hand
+        // cluster only grew — the gear button left, but a fourth pill costs more than it freed —
+        // and the headline is what has to give way, so this is the frame that proves it does.
+        let narrow = MainWindowPage(
+            store: store,
+            stats: StatsStore(),
+            preferences: preferences,
+            updates: updates,
+            mode: .constant(.byProject),
+            query: .constant(""),
+            now: Date(),
+            showingUpdate: .constant(false)
+        )
+        .frame(width: 720, alignment: .topLeading)
+        .themed(.light)
+        .environment(\.isOffscreenRender, true)
+        .background(Theme.paper.bg)
+        write(narrow, to: outputDirectory.appendingPathComponent("light-narrow.png"))
+
         renderStats(
             to: outputDirectory, demo: demo, store: store, preferences: preferences, quiet: quiet
         )

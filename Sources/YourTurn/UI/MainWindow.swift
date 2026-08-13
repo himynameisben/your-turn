@@ -19,13 +19,18 @@ struct MainWindow: View {
 
     private let ticker = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
-    /// The three pages this window shows. Two of them group the same session list; the third
-    /// is a different subject entirely, and it sits in the same picker anyway — from where
+    /// The four pages this window shows. Two of them group the same session list; the other two
+    /// are different subjects entirely, and they sit in the same picker anyway — from where
     /// you're standing these are just "what am I looking at", which is what a tab is.
+    ///
+    /// Settings became one of them rather than keeping a window of its own: an app that lives in
+    /// the menu bar and usually has no windows at all shouldn't answer a click by opening a
+    /// second one.
     enum Mode: String, CaseIterable, Identifiable {
         case byTime = "By time"
         case byProject = "By project"
         case usage = "Usage"
+        case settings = "Settings"
         var id: String { rawValue }
 
         /// `rawValue` stays English on purpose — it's the `Identifiable` id, so translating it
@@ -35,8 +40,13 @@ struct MainWindow: View {
             case .byTime: L("By time")
             case .byProject: L("By project")
             case .usage: L("Usage")
+            case .settings: L("Settings")
             }
         }
+
+        /// True for the pages that aren't the session list, which is what the search field
+        /// searches. Both fade it out rather than removing it — see the masthead.
+        var isSessionList: Bool { self == .byTime || self == .byProject }
     }
 
     var body: some View {
@@ -119,13 +129,18 @@ struct MainWindowPage: View {
                     // `loadIfNeeded` skips the work entirely when you flip back within a
                     // minute, so switching tabs stays free.
                     .task { await stats.loadIfNeeded() }
+            } else if mode == .settings {
+                SettingsPage(
+                    store: store, preferences: preferences, updates: updates,
+                    showingUpdate: $showingUpdate
+                )
             } else if !query.isEmpty {
                 searchResults
             } else {
                 switch mode {
                 case .byProject: projectSections
                 case .byTime: timelineSection
-                case .usage: EmptyView()
+                case .usage, .settings: EmptyView()
                 }
             }
         }
@@ -136,15 +151,11 @@ struct MainWindowPage: View {
     private var masthead: some View {
         HStack(alignment: .top, spacing: 24) {
             VStack(alignment: .leading, spacing: 12) {
-                Text(mode == .usage
-                    ? UsageMasthead.dateline(stats.summary, period: stats.period)
-                    : dateline)
+                Text(datelineText)
                     .font(Theme.meta)
                     .tracking(0.6)
                     .foregroundStyle(theme.faint)
-                Text(mode == .usage
-                    ? UsageMasthead.headline(stats.summary, period: stats.period)
-                    : store.headline)
+                Text(headlineText)
                     .font(Theme.display)
                     .foregroundStyle(theme.text)
                     .lineSpacing(5)
@@ -152,19 +163,20 @@ struct MainWindowPage: View {
             }
             Spacer(minLength: 20)
             VStack(alignment: .trailing, spacing: 10) {
-                // The search box only searches sessions, so it goes blank on the usage page
-                // rather than sitting there inert. Faded and disabled rather than removed:
-                // taking it out of the stack pulls the tab picker up by the height of a text
-                // field, sliding the control you just clicked out from under the cursor.
+                // The search box only searches sessions, so it goes blank on the usage and
+                // settings pages rather than sitting there inert. Faded and disabled rather than
+                // removed: taking it out of the stack pulls the tab picker up by the height of a
+                // text field, sliding the control you just clicked out from under the cursor.
                 // `disabled` is what keeps an invisible field out of the keyboard focus chain.
                 searchField
-                    .opacity(mode == .usage ? 0 : 1)
-                    .disabled(mode == .usage)
+                    .opacity(mode.isSessionList ? 1 : 0)
+                    .disabled(!mode.isSessionList)
                 HStack(spacing: 8) {
                     if case .available(let release) = updates.state {
                         UpdateBadge(version: release.version) { showingUpdate = true }
                     }
-                    IconButton(symbol: "gearshape", help: L("Settings"), window: SettingsWindow.id)
+                    // No gear button any more: settings is one of the pills to its right, and two
+                    // controls opening the same page next to each other is one too many.
                     PillPicker(options: MainWindow.Mode.allCases, selection: $mode) { $0.displayName }
                 }
             }
@@ -172,6 +184,24 @@ struct MainWindowPage: View {
         .padding(.horizontal, Theme.pageInset)
         .padding(.top, 30)
         .padding(.bottom, 26)
+    }
+
+    /// Each tab names itself in the kicker. Settings gets a fixed pair rather than anything
+    /// computed: there is no number about your preferences worth putting in 27pt serif.
+    private var datelineText: String {
+        switch mode {
+        case .usage: UsageMasthead.dateline(stats.summary, period: stats.period)
+        case .settings: L("SETTINGS")
+        case .byTime, .byProject: dateline
+        }
+    }
+
+    private var headlineText: String {
+        switch mode {
+        case .usage: UsageMasthead.headline(stats.summary, period: stats.period)
+        case .settings: L("How Your Turn behaves.")
+        case .byTime, .byProject: store.headline
+        }
     }
 
     private var dateline: String {
@@ -556,33 +586,3 @@ struct SessionLine: View {
 }
 
 
-/// Opens another window from the masthead. Appearance switching has moved into the
-/// settings page — there's room there for four options side by side, so you can see
-/// the choice at a glance instead of having to open a dropdown to find out.
-private struct IconButton: View {
-    let symbol: String
-    let help: String
-    let window: String
-
-    @Environment(\.theme) private var theme
-    @Environment(\.openWindow) private var openWindow
-    @State private var isHovering = false
-
-    var body: some View {
-        Button {
-            openWindow(id: window)
-        } label: {
-            Image(systemName: symbol)
-                .font(.system(size: 11))
-                .foregroundStyle(theme.muted)
-                .frame(width: 26, height: 26)
-                .background(isHovering ? theme.hover : .clear, in: .rect(cornerRadius: 6))
-                .padding(2)
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.rule, lineWidth: 1))
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovering = $0 }
-        .help(help)
-    }
-}
