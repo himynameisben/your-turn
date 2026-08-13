@@ -86,6 +86,7 @@ Sources/YourTurn/
 │   ├── SettingsWindow.swift    settings
 │   ├── Theme.swift             three palettes + type scale, passed via the \.theme environment value
 │   ├── Components.swift        PillPicker, activation policy
+│   ├── UpdateViews.swift       the amber `UpdateBadge` and the one `UpdateSheet` it opens
 │   ├── Localization.swift      the `L("…")` helper, `AppLanguage`, and the live-switch scope
 │   └── RenderCommand.swift     implementation of --render, plus the --demo fake sessions
 └── Resources/
@@ -151,12 +152,29 @@ comments in the corresponding file (they carry the numbers).
 - **Compare versions numerically, never as strings** — "0.10.0" sorts *before* "0.9.0"
   lexicographically, so the app would go silent exactly when it finally had news.
   `--update-check` prints the ordering table and flags the pairs string comparison gets wrong.
+- **A badge, not a menu item** — the first version put both routes in a submenu off the "…"
+  button: technically present, practically invisible. It's now an amber `UpdateBadge` in the
+  main window's masthead, in the menu bar panel's footer next to "All", and in the settings
+  About row, all opening one `UpdateSheet`. The badge wears `waitingChip`, the same amber as the
+  session chips — it can't be mistaken for one, because those are a bare number and this one has
+  the word on it. Compact ("Update") wherever it shares a line with other controls; the About row
+  is the one place with room and the one place whose job is telling you which version is which,
+  so there it reads "Update to 0.3.0".
+- **The panel's badge routes through the main window** — `MenuBarExtra(.window)` is an `NSPanel`
+  that closes the moment it loses key, which is exactly what a sheet or popover on top of it
+  does. It sets `Navigation.showingUpdate` and opens the window, which is also where the same
+  badge lives, so both roads reach one sheet.
 - **Both update routes are offered, never guessed** — a cask-installed copy sits at exactly the
   same `/Applications` path as one dragged there by hand, so the app cannot tell which way it got
-  there, and sending a `brew` user to a zip is worse than asking. Download and
-  `brew upgrade --cask your-turn` sit side by side; the command is printed rather than described
-  ("Copy the brew command" is longer than the command), and clicking it copies. The "…" menu
-  puts the same pair in a submenu so the menu still grows by one row, not two.
+  there, and sending a `brew` user to a zip is worse than asking. The sheet has a primary
+  Download button and `brew upgrade --cask your-turn` underneath. The command is printed rather
+  than described ("Copy the brew command" is longer than the command) with a copy glyph on the
+  right — without it the box reads as a code sample, and nobody clicks a code sample.
+- **The published screenshots render with the badge off** — `--render --demo` seeds a pending
+  release, and an "Update" badge in the README implies the app in the picture is stale. The
+  main-window and usage frames get a deliberately empty second `UpdateCheck`; the badge and sheet
+  get their own frames (`*-update.png`, `light-update-badge.png`, `light-update-panel.png`),
+  same reasoning as `light-usage-month.png`.
 - **Nothing about updates touches the menu bar badge** — the icon and its number answer one
   question, "how many sessions are waiting for you". A second meaning turns a glanceable count
   into something you have to stop and interpret. The notice lives in the "…" menu and the

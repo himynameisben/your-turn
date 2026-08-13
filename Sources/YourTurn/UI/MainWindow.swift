@@ -11,6 +11,7 @@ struct MainWindow: View {
     let stats: StatsStore
     let preferences: AppPreferences
     let navigation: Navigation
+    let updates: UpdateCheck
 
     @Environment(\.theme) private var theme
     @State private var query = ""
@@ -44,13 +45,18 @@ struct MainWindow: View {
                 store: store,
                 stats: stats,
                 preferences: preferences,
+                updates: updates,
                 mode: Bindable(navigation).mode,
                 query: $query,
-                now: now
+                now: now,
+                showingUpdate: Bindable(navigation).showingUpdate
             )
         }
         .background(theme.bg)
         .frame(minWidth: 720, minHeight: 520)
+        // Presented from the window, not the page: the page is what `--render` rasterizes, and a
+        // sheet modifier there would attach to a view that never gets a window to hang off.
+        .updateSheet(updates.state, isPresented: Bindable(navigation).showingUpdate)
         .task { await store.refresh() }
         .onReceive(ticker) { tick in
             now = tick
@@ -74,6 +80,10 @@ struct MainWindow: View {
 @MainActor
 final class Navigation {
     var mode: MainWindow.Mode = .byProject
+
+    /// Also set by the menu bar panel's badge, which opens the window *with the sheet already up* —
+    /// same reason `mode` lives here rather than in the window's `@State`.
+    var showingUpdate = false
 }
 
 /// The whole scrollable page inside the window.
@@ -86,9 +96,11 @@ struct MainWindowPage: View {
     let store: SessionStore
     let stats: StatsStore
     let preferences: AppPreferences
+    let updates: UpdateCheck
     @Binding var mode: MainWindow.Mode
     @Binding var query: String
     let now: Date
+    @Binding var showingUpdate: Bool
 
     @Environment(\.theme) private var theme
     @Environment(\.isOffscreenRender) private var isOffscreenRender
@@ -149,6 +161,9 @@ struct MainWindowPage: View {
                     .opacity(mode == .usage ? 0 : 1)
                     .disabled(mode == .usage)
                 HStack(spacing: 8) {
+                    if case .available(let release) = updates.state {
+                        UpdateBadge(version: release.version) { showingUpdate = true }
+                    }
                     IconButton(symbol: "gearshape", help: L("Settings"), window: SettingsWindow.id)
                     PillPicker(options: MainWindow.Mode.allCases, selection: $mode) { $0.displayName }
                 }

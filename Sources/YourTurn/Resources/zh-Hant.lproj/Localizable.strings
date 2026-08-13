@@ -91,12 +91,14 @@
 "Reads session records from ~/.claude — read-only, never written to." = "讀取 ~/.claude 的 session 紀錄，對它只讀不寫。";
 
 /* MARK: - Update notice */
+"Update" = "更新";
 "%@ is available" = "有 %@ 可用";
-"Download" = "下載";
-"Copied" = "已複製";
 "Update to %@" = "更新到 %@";
+"You're running %@." = "你現在跑的是 %@。";
 "Download from GitHub…" = "從 GitHub 下載…";
-"Copy \"brew upgrade --cask your-turn\"" = "複製「brew upgrade --cask your-turn」";
+"Or, if you installed it with Homebrew:" = "如果你是用 Homebrew 裝的：";
+"Copied" = "已複製";
+"Close" = "關閉";
 
 "Follows the system's light/dark setting. The system is currently dark." = "跟著系統的淺色／深色走。目前系統是深色。";
 "Follows the system's light/dark setting. The system is currently light." = "跟著系統的淺色／深色走。目前系統是淺色。";

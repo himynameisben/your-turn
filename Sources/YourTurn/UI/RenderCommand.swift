@@ -20,6 +20,8 @@ enum RenderCommand {
         let store = SessionStore()
         let preferences = AppPreferences()
         let updates = UpdateCheck()
+        /// A second, deliberately empty one for the pages that get published.
+        let quiet = UpdateCheck()
 
         if demo {
             store.loadDemo(DemoData.groups(now: Date()))
@@ -61,9 +63,14 @@ enum RenderCommand {
                 // session screenshots entirely.
                 stats: StatsStore(),
                 preferences: preferences,
+                // Quiet on purpose, even under --demo: these are the shots that get published,
+                // and an "Update" badge in the README implies the app in the picture is stale.
+                // The badge and its sheet get their own files below.
+                updates: quiet,
                 mode: .constant(.byProject),
                 query: .constant(""),
-                now: Date()
+                now: Date(),
+                showingUpdate: .constant(false)
             )
             .frame(width: 1000, alignment: .topLeading)
             .themed(appearance)
@@ -80,7 +87,64 @@ enum RenderCommand {
                 .background(palette.bg)
             write(settings, to: outputDirectory.appendingPathComponent("\(appearance.rawValue)-settings.png"))
         }
-        renderStats(to: outputDirectory, demo: demo, store: store, preferences: preferences)
+        renderStats(
+            to: outputDirectory, demo: demo, store: store, preferences: preferences, quiet: quiet
+        )
+        renderUpdate(
+            to: outputDirectory, updates: updates, preferences: preferences, store: store
+        )
+    }
+
+    /// The update sheet, plus one frame of the masthead carrying its badge.
+    ///
+    /// Same reasoning as `light-usage-month.png`: these are states that exist only after a
+    /// release lands, so nothing in a default render shows them. The sheet gets all three
+    /// palettes — it has a filled primary button and a bordered code box, and both need looking
+    /// at on warm black — while the badge-in-context frame is light only, since what's being
+    /// checked there is alignment against the gear button and the tab picker.
+    private static func renderUpdate(
+        to directory: URL, updates: UpdateCheck, preferences: AppPreferences, store: SessionStore
+    ) {
+        guard case .available(let release) = updates.state else {
+            print("Update: nothing pending, skipping the update frames")
+            return
+        }
+        for appearance in Appearance.allCases where appearance != .system {
+            let palette = appearance.theme(system: .light)
+            let sheet = UpdateSheet(release: release)
+                .themed(appearance)
+                .environment(\.isOffscreenRender, true)
+                .background(palette.bg)
+            write(sheet, to: directory.appendingPathComponent("\(appearance.rawValue)-update.png"))
+        }
+
+        let badged = MainWindowPage(
+            store: store,
+            stats: StatsStore(),
+            preferences: preferences,
+            updates: updates,
+            mode: .constant(.byProject),
+            query: .constant(""),
+            now: Date(),
+            showingUpdate: .constant(false)
+        )
+        .frame(width: 1000, alignment: .topLeading)
+        .themed(.light)
+        .environment(\.isOffscreenRender, true)
+        .background(Theme.paper.bg)
+        write(badged, to: directory.appendingPathComponent("light-update-badge.png"))
+
+        // The menu bar panel is otherwise never rendered — its list is a `ScrollView`, which
+        // `ImageRenderer` won't expand, so the frame comes out with an empty middle. That's fine
+        // here: what's being checked is the footer, where the badge has to sit beside "All"
+        // without pushing the "…" button off the panel's fixed 390pt.
+        let panel = MenuBarPanel(
+            store: store, preferences: preferences, navigation: Navigation(), updates: updates
+        )
+        .themed(.light)
+        .environment(\.isOffscreenRender, true)
+        .background(Theme.paper.bg)
+        write(panel, to: directory.appendingPathComponent("light-update-panel.png"))
     }
 
     /// Renders the usage tab for each palette.
@@ -90,7 +154,8 @@ enum RenderCommand {
     /// included. A real scan here would publish this machine's project names and actual
     /// spend, so `--demo` is not optional for anything that leaves the laptop.
     private static func renderStats(
-        to directory: URL, demo: Bool, store: SessionStore, preferences: AppPreferences
+        to directory: URL, demo: Bool, store: SessionStore, preferences: AppPreferences,
+        quiet: UpdateCheck
     ) {
         let stats = usageStore(demo: demo, period: .all)
         print("Usage: \(stats.summary?.requests ?? 0) request(s)")
@@ -101,9 +166,11 @@ enum RenderCommand {
                 store: store,
                 stats: stats,
                 preferences: preferences,
+                updates: quiet,
                 mode: .constant(.usage),
                 query: .constant(""),
-                now: Date()
+                now: Date(),
+                showingUpdate: .constant(false)
             )
             .frame(width: 1000, alignment: .topLeading)
             .themed(appearance)
@@ -125,9 +192,11 @@ enum RenderCommand {
             store: store,
             stats: filteredStats,
             preferences: preferences,
+            updates: quiet,
             mode: .constant(.usage),
             query: .constant(""),
-            now: Date()
+            now: Date(),
+            showingUpdate: .constant(false)
         )
         .frame(width: 1000, alignment: .topLeading)
         .themed(.light)
