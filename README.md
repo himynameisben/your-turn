@@ -93,6 +93,15 @@ session's window), and macOS prompts you before granting it.
 
 **Requirements:** macOS 15+, [Claude Code](https://claude.com/claude-code)
 
+- **Homebrew:**
+
+  ```bash
+  brew install --cask himynameisben/tap/your-turn
+  ```
+
+  `brew upgrade --cask your-turn` follows new releases. The cask lives in
+  [himynameisben/homebrew-tap](https://github.com/himynameisben/homebrew-tap).
+
 - **Download** the signed & notarized app from [Releases](../../releases), unzip,
   and drag it to Applications.
 - **Build from source:**
@@ -110,8 +119,6 @@ session's window), and macOS prompts you before granting it.
   launches it. Re-run that line to upgrade in place — and use it for the copy you
   actually live with, since "start at login" registers whatever bundle path it was
   switched on from, and one armed from `build/` breaks when that directory is wiped.
-
-- Homebrew cask: planned.
 
 ## How it works
 
