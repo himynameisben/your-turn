@@ -93,11 +93,15 @@
 "About" = "About";
 "Reads session records from ~/.claude — read-only, never written to." = "Reads session records from ~/.claude — read-only, never written to.";
 
-/* MARK: - Update notice. Both strings only ever appear when there is a newer release —
-   there is no "you are up to date" wording anywhere, on purpose. */
+/* MARK: - Update notice. Every string here only ever appears when there is a newer release —
+   there is no "you are up to date" wording anywhere, on purpose. Both routes are offered because
+   the app can't tell whether this copy came from the zip or from the Homebrew cask. */
 "%@ is available" = "%@ is available";
-"A newer release is published on GitHub. Your Turn checks once a day and sends nothing with the request." = "A newer release is published on GitHub. Your Turn checks once a day and sends nothing with the request.";
-"Update to %@…" = "Update to %@…";
+"Download" = "Download";
+"Copied" = "Copied";
+"Update to %@" = "Update to %@";
+"Download from GitHub…" = "Download from GitHub…";
+"Copy \"brew upgrade --cask your-turn\"" = "Copy \"brew upgrade --cask your-turn\"";
 
 /* Written out in full rather than interpolating "dark"/"light" into one sentence: a
    fragment that reads fine in English lands mid-sentence in Chinese, where the wording

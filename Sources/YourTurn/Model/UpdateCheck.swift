@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 
@@ -100,6 +101,18 @@ final class UpdateCheck {
               let page = defaults.string(forKey: Key.latestPage).flatMap(URL.init(string:))
         else { return nil }
         return Release(version: version, page: page)
+    }
+
+    // MARK: - Getting the update
+
+    /// The other way in. Which one a given copy used isn't knowable from inside the app — a
+    /// cask-installed bundle sits at exactly the same `/Applications` path as a hand-dragged
+    /// one — so both routes are offered wherever the notice appears, rather than guessed at.
+    nonisolated static let brewCommand = "brew upgrade --cask your-turn"
+
+    nonisolated static func copyBrewCommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(brewCommand, forType: .string)
     }
 
     // MARK: - The request

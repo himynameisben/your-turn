@@ -284,8 +284,17 @@ struct SettingsMenu: View {
             // Only ever present when there's something to say. An always-visible "Check for
             // Updates…" would be a permanent item that reports "you're up to date" every time
             // it's used, in an app whose whole point is not making you check things.
+            //
+            // A submenu rather than two rows: both ways in (zip and Homebrew cask) have to be
+            // offered because the app can't tell which one you used, but a menu that grows by two
+            // lines the week a release lands is a worse trade than one hover.
             if case .available(let release) = updates.state {
-                Button(L("Update to \(release.version)…")) { NSWorkspace.shared.open(release.page) }
+                Menu(L("Update to \(release.version)")) {
+                    Button(L("Download from GitHub…")) { NSWorkspace.shared.open(release.page) }
+                    Button(L("Copy \"brew upgrade --cask your-turn\"")) {
+                        UpdateCheck.copyBrewCommand()
+                    }
+                }
                 Divider()
             }
             // Opens the main window *onto* the usage tab — which is the whole reason the

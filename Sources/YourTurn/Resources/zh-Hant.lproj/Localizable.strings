@@ -92,8 +92,11 @@
 
 /* MARK: - Update notice */
 "%@ is available" = "有 %@ 可用";
-"A newer release is published on GitHub. Your Turn checks once a day and sends nothing with the request." = "GitHub 上有更新的版本。Your Turn 每天查一次，請求本身不帶任何資料。";
-"Update to %@…" = "更新到 %@…";
+"Download" = "下載";
+"Copied" = "已複製";
+"Update to %@" = "更新到 %@";
+"Download from GitHub…" = "從 GitHub 下載…";
+"Copy \"brew upgrade --cask your-turn\"" = "複製「brew upgrade --cask your-turn」";
 
 "Follows the system's light/dark setting. The system is currently dark." = "跟著系統的淺色／深色走。目前系統是深色。";
 "Follows the system's light/dark setting. The system is currently light." = "跟著系統的淺色／深色走。目前系統是淺色。";

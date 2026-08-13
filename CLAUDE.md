@@ -151,6 +151,12 @@ comments in the corresponding file (they carry the numbers).
 - **Compare versions numerically, never as strings** — "0.10.0" sorts *before* "0.9.0"
   lexicographically, so the app would go silent exactly when it finally had news.
   `--update-check` prints the ordering table and flags the pairs string comparison gets wrong.
+- **Both update routes are offered, never guessed** — a cask-installed copy sits at exactly the
+  same `/Applications` path as one dragged there by hand, so the app cannot tell which way it got
+  there, and sending a `brew` user to a zip is worse than asking. Download and
+  `brew upgrade --cask your-turn` sit side by side; the command is printed rather than described
+  ("Copy the brew command" is longer than the command), and clicking it copies. The "…" menu
+  puts the same pair in a submenu so the menu still grows by one row, not two.
 - **Nothing about updates touches the menu bar badge** — the icon and its number answer one
   question, "how many sessions are waiting for you". A second meaning turns a glanceable count
   into something you have to stop and interpret. The notice lives in the "…" menu and the
