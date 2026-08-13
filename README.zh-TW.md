@@ -80,6 +80,15 @@ Your Turn 是**閱讀器**。Claude Code 早就把需要的一切寫進 `~/.clau
 
 **需求：** macOS 15+、[Claude Code](https://claude.com/claude-code)
 
+- **Homebrew：**
+
+  ```bash
+  brew install --cask himynameisben/tap/your-turn
+  ```
+
+  之後 `brew upgrade --cask your-turn` 就會跟上新版。cask 放在
+  [himynameisben/homebrew-tap](https://github.com/himynameisben/homebrew-tap)。
+
 - **下載**已簽章與公證的版本：[Releases](../../releases)，解壓縮拖進 Applications。
 - **從原始碼建置：**
 
@@ -95,8 +104,6 @@ Your Turn 是**閱讀器**。Claude Code 早就把需要的一切寫進 `~/.clau
   正在跑的舊版、覆蓋掉 `/Applications/YourTurn.app`、再開起來。之後要更新就再跑同
   一行——平常用的那份建議走這條，因為「開機啟動」登記的是當時那個 bundle 路徑，從
   `build/` 打開的哪天目錄被清掉就失效了。
-
-- Homebrew cask：規劃中。
 
 ## 運作原理
 

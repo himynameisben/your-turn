@@ -45,6 +45,27 @@ gh release create v<version> dist/YourTurn-<version>.zip \
   --title "Your Turn <version>" --generate-notes
 ```
 
+## Pointing the Homebrew cask at it
+
+The cask lives in a separate repository,
+[himynameisben/homebrew-tap](https://github.com/himynameisben/homebrew-tap). It holds
+no binary — only the release URL and its checksum — so a release isn't shipped to
+`brew` users until those two lines move:
+
+```bash
+cd ../homebrew-tap
+Scripts/bump.sh <version>            # downloads the published zip and hashes it
+brew audit --cask --online Casks/your-turn.rb
+git commit -am "your-turn <version>" && git push
+```
+
+Run it **after** `gh release create`, not before — `bump.sh` fetches the asset from
+GitHub, so an unpublished tag fails there instead of shipping a wrong checksum.
+
+Never re-upload an asset under a tag that already exists: the URL stays the same while
+the checksum changes, and everyone who taps between the upload and the cask bump gets a
+mismatch error rather than an app.
+
 ## Sanity check before uploading
 
 ```bash
