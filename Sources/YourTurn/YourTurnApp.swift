@@ -77,7 +77,10 @@ struct YourTurnApp: App {
         .menuBarExtraStyle(.window)
 
         Window("Your Turn", id: MainWindow.id) {
-            MainWindow(store: store, stats: stats, preferences: preferences, navigation: navigation)
+            MainWindow(
+                store: store, stats: stats, preferences: preferences,
+                navigation: navigation, updates: updates
+            )
                 .themed(preferences.appearance)
                 .localized(preferences)
                 // Outside `.localized`, deliberately: a language switch rebuilds everything

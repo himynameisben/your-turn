@@ -33,6 +33,9 @@ struct SettingsPage: View {
 
     @Environment(\.theme) private var theme
     @Environment(\.isOffscreenRender) private var isOffscreenRender
+    /// Local, unlike the main window's: this window has no second entry point that needs to open
+    /// it already presented.
+    @State private var showingUpdate = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -133,6 +136,7 @@ struct SettingsPage: View {
         // The login item can be switched off in System Settings while this window is
         // closed, so the switch is re-read on the way in rather than trusted.
         .onAppear { preferences.launchAtLogin.refresh() }
+        .updateSheet(updates.state, isPresented: $showingUpdate)
     }
 
     private var rule: some View {
@@ -213,7 +217,7 @@ struct SettingsPage: View {
                     .font(Theme.sessionTitle)
                     .foregroundStyle(theme.text)
                 if case .available(let release) = updates.state {
-                    UpdateNotice(release: release)
+                    UpdateBadge(version: release.version, compact: false) { showingUpdate = true }
                 }
             }
         }
@@ -226,74 +230,6 @@ struct SettingsPage: View {
     private static var appName: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         return version.map { "Your Turn \($0)" } ?? "Your Turn"
-    }
-}
-
-/// "There's a newer one", plus both ways of getting it.
-///
-/// Two paths because there are two ways in — the zip from Releases and the Homebrew cask — and
-/// which one applies isn't something the app can tell: a cask-installed copy sits at exactly the
-/// same `/Applications` path as one dragged there by hand. Offering both beats guessing wrong and
-/// sending a `brew` user to a zip they'd have to unpack over their managed install.
-///
-/// The `brew` line prints the command itself rather than saying "copy the command": it's shorter
-/// than the sentence describing it, and someone who'd rather type it into a terminal they already
-/// have open can just read it.
-private struct UpdateNotice: View {
-    let release: UpdateCheck.Release
-
-    @Environment(\.theme) private var theme
-    @Environment(\.isOffscreenRender) private var isOffscreenRender
-    @State private var copied = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            // `dotWaiting` is the palette's "this one needs you" amber, already carried by the
-            // session dots — same signal, so it should be the same colour.
-            Text(L("\(release.version) is available"))
-                .font(Theme.meta)
-                .foregroundStyle(Theme.dotWaiting)
-
-            HStack(spacing: 9) {
-                tappable(
-                    Text(L("Download"))
-                        .font(Theme.meta)
-                        .foregroundStyle(theme.muted)
-                ) { NSWorkspace.shared.open(release.page) }
-
-                Text("·")
-                    .font(Theme.meta)
-                    .foregroundStyle(theme.faint)
-
-                tappable(
-                    Text(copied ? L("Copied") : UpdateCheck.brewCommand)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(copied ? Theme.dotRunning : theme.muted)
-                ) { copyBrewCommand() }
-            }
-        }
-    }
-
-    /// `ImageRenderer` draws AppKit-backed controls as a yellow prohibition sign, so a render
-    /// gets the label without the button wrapped around it — same text, same place.
-    @ViewBuilder
-    private func tappable(_ label: some View, action: @escaping () -> Void) -> some View {
-        if isOffscreenRender {
-            label
-        } else {
-            Button(action: action) { label }.buttonStyle(.plain)
-        }
-    }
-
-    private func copyBrewCommand() {
-        UpdateCheck.copyBrewCommand()
-        copied = true
-        // Reverts on its own: a permanent "Copied" would leave the command unreadable for anyone
-        // who wanted to read it rather than paste it.
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            copied = false
-        }
     }
 }
 

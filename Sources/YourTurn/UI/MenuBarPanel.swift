@@ -123,6 +123,17 @@ struct MenuBarPanel: View {
                     .foregroundStyle(theme.faint)
             }
             Spacer()
+            // Routed through the main window rather than presented here: this panel is an
+            // `NSPanel` that closes the moment it loses key, which is exactly what putting a
+            // sheet or a popover on top of it does. The window is also where the same badge
+            // lives, so both roads lead to one sheet.
+            if case .available(let release) = updates.state {
+                UpdateBadge(version: release.version) {
+                    navigation.showingUpdate = true
+                    openWindow(id: MainWindow.id)
+                }
+                .padding(.trailing, 12)
+            }
             Button(L("All")) { openWindow(id: MainWindow.id) }
                 .buttonStyle(.plain)
                 .font(Theme.meta)
@@ -281,22 +292,6 @@ struct SettingsMenu: View {
 
     var body: some View {
         Menu {
-            // Only ever present when there's something to say. An always-visible "Check for
-            // Updates…" would be a permanent item that reports "you're up to date" every time
-            // it's used, in an app whose whole point is not making you check things.
-            //
-            // A submenu rather than two rows: both ways in (zip and Homebrew cask) have to be
-            // offered because the app can't tell which one you used, but a menu that grows by two
-            // lines the week a release lands is a worse trade than one hover.
-            if case .available(let release) = updates.state {
-                Menu(L("Update to \(release.version)")) {
-                    Button(L("Download from GitHub…")) { NSWorkspace.shared.open(release.page) }
-                    Button(L("Copy \"brew upgrade --cask your-turn\"")) {
-                        UpdateCheck.copyBrewCommand()
-                    }
-                }
-                Divider()
-            }
             // Opens the main window *onto* the usage tab — which is the whole reason the
             // selected page lives in `Navigation` rather than in the window's own `@State`.
             Button(L("Usage")) {
