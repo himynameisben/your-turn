@@ -1,8 +1,8 @@
 #!/bin/bash
 # Build a release .app and install it into /Applications, replacing what's there.
 #
-#   ./Scripts/install.sh          # version 0.1.0, bundle.sh's default
-#   ./Scripts/install.sh 0.2.0    # stamp a version into Info.plist
+#   ./Scripts/install.sh          # whatever version bundle.sh defaults to
+#   ./Scripts/install.sh 0.3.0    # stamp a specific version into Info.plist
 #   DEST=~/Applications/YourTurn.app ./Scripts/install.sh
 #
 # This is the "put it on my own Mac" path: an ad-hoc signature is all a bundle that
@@ -14,7 +14,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="${DEST:-/Applications/YourTurn.app}"
 cd "$ROOT"
 
-VERSION="${1:-${VERSION:-0.1.0}}" ./Scripts/bundle.sh release
+# Left empty when not given, so the single default in bundle.sh applies — a second
+# copy of the version number here silently overrode it once already.
+VERSION="${1:-${VERSION:-}}" ./Scripts/bundle.sh release
 
 # Quit first, and wait for it to actually be gone. Copying over a running .app leaves
 # the live process pointing at a bundle that no longer exists: the menu bar icon stays

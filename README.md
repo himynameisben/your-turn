@@ -1,21 +1,23 @@
 # Your Turn
 
-**An inbox for your Claude Code sessions.**
+**An inbox for your Claude Code sessions — and a record of where your tokens went.**
 
 You're running three, five, eight Claude Code sessions in parallel — and *you* are
-now the bottleneck. Your Turn sits in the macOS menu bar and answers the three
-questions that matter: **which sessions are open? which one is waiting for me?
-where did it stop, and what's next?**
+now the bottleneck. Your Turn sits in the macOS menu bar and answers four questions:
+**which sessions are open? which one is waiting for me? where did it stop, and what's
+next? and which projects have been eating my tokens?**
+
+It runs no LLM, reads no conversation, and treats `~/.claude` as read-only.
 
 English | [繁體中文](README.zh-TW.md)
 
 ![Your Turn main window](docs/screenshots/light.png)
 
-## Why not another usage monitor?
+## Whose turn is it?
 
-Most Claude Code menu bar apps track tokens, quotas, and cost. Your Turn tracks
-something else: **whose turn it is**. A session that's running doesn't need you. A
-session that finished is done. The only thing worth a badge is a session that
+Most Claude Code menu bar apps show a status light. Your Turn tracks something
+narrower and more useful: **whose turn it is**. A session that's running doesn't need
+you. A session that finished is done. The only thing worth a badge is a session that
 stopped and is waiting for your reply — and for that one, you want to know *what it
 said last*, not just that a light turned amber.
 
@@ -29,6 +31,27 @@ Click it, and Your Turn jumps you back to the exact place the session lives: the
 right VS Code window, the right iTerm2 tab, the right Terminal window. Finished
 sessions reopen with `claude --resume` in a fresh terminal.
 
+## What have you been busy with?
+
+![The Usage tab](docs/screenshots/light-usage.png)
+
+The Usage tab answers the thing you can't reconstruct from memory: **which projects
+actually took your week, and which one burned the most tokens.** Pick a month or a
+week and the whole page re-scopes to it — the project ranking, the model split, and
+how much of the day each of you spent waiting on the other.
+
+Claude Code records token counts in its transcripts but no cost, so Your Turn works it
+out from
+[LiteLLM's public price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json).
+Cross-checked against `ccusage`, the total lands within 0.3%.
+
+### A contribution graph, for tokens
+
+![Scoped to one month](docs/screenshots/light-usage-month.png)
+
+One square per day, shaded by how hard you leaned on Claude that day. Click a square,
+or step with the arrows, to scope the page to that month or week.
+
 ## Features
 
 - **Menu bar badge that only counts what needs you** — running sessions don't ring
@@ -36,6 +59,8 @@ sessions reopen with `claude --resume` in a fresh terminal.
   by-time / by-project grouping when you want the overview
 - **Jump back to the exact window** — VS Code, iTerm2, and Terminal.app supported
 - **Star** the projects you care about, **archive** what you don't
+- **Usage tab** — which projects took the week, by tokens and by cost, with a heatmap
+  and month / week filters
 - **Start at login** — one switch in Settings, registered as a real macOS login item
 - **Three hand-tuned palettes** (light / dim / dark) — palettes are data, not a
   dark-mode toggle
@@ -49,8 +74,14 @@ Your Turn is a **reader**. Claude Code already writes everything it needs into
 `~/.claude`; this app just reads it.
 
 - **Read-only** on `~/.claude` — it never writes there
-- Reads only the **last 64KB** of each session file
-- **No network access, no telemetry, no LLM calls** — nothing ever leaves your Mac
+- The inbox reads only the **last 64KB** of each session file. The Usage tab reads
+  whole files, but only counts token numbers — it still never looks at what you or
+  Claude actually said
+- **No telemetry, no LLM calls** — nothing about you ever leaves your Mac
+- **One outbound request, and only if you open the Usage tab**: a plain GET for
+  LiteLLM's public price table, so new models don't show up unpriced. It sends nothing
+  but the request itself, and a trimmed copy ships inside the app so the numbers work
+  with the network off
 - Preferences (stars, archive, appearance) live in UserDefaults / Application
   Support
 - Open source — audit it yourself
@@ -88,19 +119,24 @@ Everything comes from files Claude Code already maintains under `~/.claude`:
 
 | Path | What it provides |
 |---|---|
-| `projects/<slug>/<uuid>.jsonl` | session title, your last prompt, Claude's away summary, timestamps |
+| `projects/<slug>/<uuid>.jsonl` | session title, your last prompt, Claude's away summary, timestamps, and the token counts for every request |
+| `projects/<slug>/<uuid>/subagents/*.jsonl` | the same, for everything a session fanned out to |
 | `sessions/<pid>.json` | live registry: which process runs which session, and its status |
 | `ide/<port>.lock` | which VS Code window a session belongs to |
 
-The interesting engineering decisions (why tail-64KB, why mtime lies, how live
-processes are matched to sessions) are documented with measured numbers in
+The interesting engineering decisions — why tail-64KB, why mtime lies, how live
+processes are matched to sessions, and why the same `requestId` can report different
+token counts on different lines — are documented with measured numbers in
 [CLAUDE.md](CLAUDE.md) and the source comments.
+
+Screenshots on this page are rendered from invented data with
+`YourTurn --render <dir> --demo`, never from a real scan.
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). The short version: keep it a reader, keep
-it dependency-free, and verify changes with the built-in `--dump` / `--render`
-tools.
+it dependency-free, and verify changes with the built-in `--dump` / `--cost` /
+`--render` tools.
 
 ## License
 

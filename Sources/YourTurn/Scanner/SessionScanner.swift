@@ -73,7 +73,8 @@ enum SessionScanner {
 
 /// `concurrentPerform` writes to pre-allocated, non-overlapping indices, so there's no actual
 /// data race — but the compiler can't prove that, hence this wrapper to cross the Sendable check.
-private struct UncheckedSendable<T>: @unchecked Sendable {
+/// Shared with `UsageScanner`, which fans out the same way.
+struct UncheckedSendable<T>: @unchecked Sendable {
     let value: T
     init(_ value: T) { self.value = value }
 }

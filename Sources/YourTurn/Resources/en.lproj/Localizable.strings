@@ -118,3 +118,72 @@
 "Opens on its own once you log in. It has no Dock icon, so it just appears in the menu bar." = "Opens on its own once you log in. It has no Dock icon, so it just appears in the menu bar.";
 "macOS has this blocked. Allow \"Your Turn\" under Login Items to switch it back on." = "macOS has this blocked. Allow \"Your Turn\" under Login Items to switch it back on.";
 "Open Login Items" = "Open Login Items";
+
+/* MARK: - Usage window */
+"Usage" = "Usage";
+"USAGE" = "USAGE";
+/* Date pattern for the usage window's range and chart end-labels. Its own key rather than a
+   shared format string: en renders "Jun 22", zh-Hant "6月22日" — different field order, not a
+   translation of the same one. */
+"stats.range.format" = "MMM d";
+"Reading your transcripts…" = "Reading your transcripts…";
+"Adding it up…" = "Adding it up…";
+"No usage recorded yet" = "No usage recorded yet";
+"%@ across %lld project." = "%@ across %lld project.";
+"%@ across %lld projects." = "%@ across %lld projects.";
+
+"Recently" = "Recently";
+"Today" = "Today";
+"This week" = "This week";
+"This month" = "This month";
+"%@ tokens · %lld requests" = "%@ tokens · %lld requests";
+
+"Each day" = "Each day";
+"peak %@" = "peak %@";
+
+"Projects" = "Projects";
+"Models" = "Models";
+"%@ of requests came from subagents." = "%@ of requests came from subagents.";
+
+/* MARK: - Usage: where the money goes */
+"Where it goes" = "Where it goes";
+"of tokens" = "of tokens";
+"of cost" = "of cost";
+"cache read" = "cache read";
+"cache write" = "cache write";
+"input" = "input";
+"output" = "output";
+
+/* MARK: - Usage: rhythm */
+"Rhythm" = "Rhythm";
+"You waited" = "You waited";
+"Claude waited" = "Claude waited";
+"A turn takes" = "A turn takes";
+"across %lld turns" = "across %lld turns";
+"typically %@ at a time" = "typically %@ at a time";
+"busiest at %lld:00" = "busiest at %lld:00";
+
+/* MARK: - Usage: provenance. Says out loud that the number is an estimate — an accounting
+   figure that doesn't admit its own error bar is the failure mode this feature has to avoid. */
+"Estimated from your own transcripts against a public price table (%@). API-equivalent, not a subscription bill." = "Estimated from your own transcripts against a public price table (%@). API-equivalent, not a subscription bill.";
+"%lld requests ran on a model with no public price (%@) and are left out of the total." = "%lld requests ran on a model with no public price (%@) and are left out of the total.";
+
+/* MARK: - Usage: period filter */
+"Period" = "Period";
+"All time" = "All time";
+"Month" = "Month";
+"Week" = "Week";
+"stats.month.format" = "MMMM yyyy";
+"Total" = "Total";
+"Per active day" = "Per active day";
+"Busiest day" = "Busiest day";
+"Nothing recorded in this period." = "Nothing recorded in this period.";
+
+/* MARK: - Usage: heatmap. Column headers over the grid; "MMM" in en, "M月" in zh-Hant. */
+"stats.monthLabel.format" = "MMM";
+"Less" = "Less";
+"More" = "More";
+"%@ tokens over %lld active days" = "%@ tokens over %lld active days";
+"%@ · nothing" = "%@ · nothing";
+"%@ · %@ tokens · %@" = "%@ · %@ tokens · %@";
+"Totals" = "Totals";

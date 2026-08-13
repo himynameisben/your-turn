@@ -8,18 +8,23 @@ struct MainWindow: View {
     static let id = "main"
 
     let store: SessionStore
+    let stats: StatsStore
     let preferences: AppPreferences
+    let navigation: Navigation
 
     @Environment(\.theme) private var theme
-    @State private var mode: Mode = .byProject
     @State private var query = ""
     @State private var now = Date()
 
     private let ticker = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
+    /// The three pages this window shows. Two of them group the same session list; the third
+    /// is a different subject entirely, and it sits in the same picker anyway — from where
+    /// you're standing these are just "what am I looking at", which is what a tab is.
     enum Mode: String, CaseIterable, Identifiable {
         case byTime = "By time"
         case byProject = "By project"
+        case usage = "Usage"
         var id: String { rawValue }
 
         /// `rawValue` stays English on purpose — it's the `Identifiable` id, so translating it
@@ -28,6 +33,7 @@ struct MainWindow: View {
             switch self {
             case .byTime: L("By time")
             case .byProject: L("By project")
+            case .usage: L("Usage")
             }
         }
     }
@@ -36,8 +42,9 @@ struct MainWindow: View {
         ScrollView {
             MainWindowPage(
                 store: store,
+                stats: stats,
                 preferences: preferences,
-                mode: $mode,
+                mode: Bindable(navigation).mode,
                 query: $query,
                 now: now
             )
@@ -47,10 +54,26 @@ struct MainWindow: View {
         .task { await store.refresh() }
         .onReceive(ticker) { tick in
             now = tick
+            // Only the session scan is on this timer. Usage is far heavier and re-reads
+            // nothing on its own — see `StatsStore.loadIfNeeded`.
             Task { await store.refresh() }
         }
     }
+}
 
+/// Which page the main window is showing.
+///
+/// Held outside the window rather than in `@State` for two reasons: the menu bar's "Usage"
+/// item has to be able to open the window *onto* that page, and a language switch re-ids the
+/// whole subtree (see `Localization`), which would otherwise bounce you back to the session
+/// list mid-read.
+///
+/// Deliberately not persisted. The inbox is the product — opening onto a spend page because
+/// you glanced at it last week would be the wrong first impression every morning.
+@Observable
+@MainActor
+final class Navigation {
+    var mode: MainWindow.Mode = .byProject
 }
 
 /// The whole scrollable page inside the window.
@@ -61,6 +84,7 @@ struct MainWindow: View {
 /// longer depends on any window lifecycle, it's a pure mapping from data to layout.
 struct MainWindowPage: View {
     let store: SessionStore
+    let stats: StatsStore
     let preferences: AppPreferences
     @Binding var mode: MainWindow.Mode
     @Binding var query: String
@@ -77,12 +101,19 @@ struct MainWindowPage: View {
             masthead
             Rectangle().fill(theme.rule).frame(height: 1)
 
-            if !query.isEmpty {
+            if mode == .usage {
+                UsageSections(store: stats, now: now)
+                    // Scans on arrival, not on the window's 30-second timer — and
+                    // `loadIfNeeded` skips the work entirely when you flip back within a
+                    // minute, so switching tabs stays free.
+                    .task { await stats.loadIfNeeded() }
+            } else if !query.isEmpty {
                 searchResults
             } else {
                 switch mode {
                 case .byProject: projectSections
                 case .byTime: timelineSection
+                case .usage: EmptyView()
                 }
             }
         }
@@ -93,11 +124,15 @@ struct MainWindowPage: View {
     private var masthead: some View {
         HStack(alignment: .top, spacing: 24) {
             VStack(alignment: .leading, spacing: 12) {
-                Text(dateline)
+                Text(mode == .usage
+                    ? UsageMasthead.dateline(stats.summary, period: stats.period)
+                    : dateline)
                     .font(Theme.meta)
                     .tracking(0.6)
                     .foregroundStyle(theme.faint)
-                Text(store.headline)
+                Text(mode == .usage
+                    ? UsageMasthead.headline(stats.summary, period: stats.period)
+                    : store.headline)
                     .font(Theme.display)
                     .foregroundStyle(theme.text)
                     .lineSpacing(5)
@@ -105,14 +140,21 @@ struct MainWindowPage: View {
             }
             Spacer(minLength: 20)
             VStack(alignment: .trailing, spacing: 10) {
+                // The search box only searches sessions, so it goes blank on the usage page
+                // rather than sitting there inert. Faded and disabled rather than removed:
+                // taking it out of the stack pulls the tab picker up by the height of a text
+                // field, sliding the control you just clicked out from under the cursor.
+                // `disabled` is what keeps an invisible field out of the keyboard focus chain.
                 searchField
+                    .opacity(mode == .usage ? 0 : 1)
+                    .disabled(mode == .usage)
                 HStack(spacing: 8) {
-                    SettingsButton()
+                    IconButton(symbol: "gearshape", help: L("Settings"), window: SettingsWindow.id)
                     PillPicker(options: MainWindow.Mode.allCases, selection: $mode) { $0.displayName }
                 }
             }
         }
-        .padding(.horizontal, 38)
+        .padding(.horizontal, Theme.pageInset)
         .padding(.top, 30)
         .padding(.bottom, 26)
     }
@@ -258,16 +300,14 @@ private struct GutterRow<Content: View>: View {
                     countBadge
                 }
             }
-            // 168, not the original 150: once the star and badge each take a slot, 150 would
-            // middle-elide a 19-character project name, which is an ordinary length here.
-            .frame(width: 168, alignment: .trailing)
+            .frame(width: Theme.gutter, alignment: .trailing)
             .padding(.trailing, 22)
             .contentShape(.rect)
             .onHover { isHovering = $0 }
 
             content
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.trailing, 38)
+                .padding(.trailing, Theme.pageInset)
         }
         .padding(.vertical, 20)
     }
@@ -501,19 +541,23 @@ struct SessionLine: View {
 }
 
 
-/// Opens the settings window. Appearance switching has moved into the settings
-/// page — there's room there for four options side by side, so you can see the
-/// choice at a glance instead of having to open a dropdown to find out.
-private struct SettingsButton: View {
+/// Opens another window from the masthead. Appearance switching has moved into the
+/// settings page — there's room there for four options side by side, so you can see
+/// the choice at a glance instead of having to open a dropdown to find out.
+private struct IconButton: View {
+    let symbol: String
+    let help: String
+    let window: String
+
     @Environment(\.theme) private var theme
     @Environment(\.openWindow) private var openWindow
     @State private var isHovering = false
 
     var body: some View {
         Button {
-            openWindow(id: SettingsWindow.id)
+            openWindow(id: window)
         } label: {
-            Image(systemName: "gearshape")
+            Image(systemName: symbol)
                 .font(.system(size: 11))
                 .foregroundStyle(theme.muted)
                 .frame(width: 26, height: 26)
@@ -524,6 +568,6 @@ private struct SettingsButton: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
-        .help(L("Settings"))
+        .help(help)
     }
 }

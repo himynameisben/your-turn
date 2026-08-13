@@ -90,6 +90,18 @@ extension Theme {
     static let dotWaiting = Color(hex: 0xE0873C)
     static let dotRunning = Color(hex: 0x6FA84F)
 
+    // MARK: Page geometry
+
+    /// The left gutter that holds the row label. 168 rather than the original 150: once the
+    /// star and count badge each claim a slot, 150 middle-elides a 19-character project name,
+    /// which is an ordinary length here.
+    ///
+    /// Shared with the stats window so both pages hang off the same spine and read as one
+    /// publication rather than two apps.
+    static let gutter: CGFloat = 168
+    /// Outer margin of every page.
+    static let pageInset: CGFloat = 38
+
     // MARK: Typography
 
     /// Large title. Serif gives it the feel of something to read, not a dashboard.
