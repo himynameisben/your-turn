@@ -25,6 +25,12 @@ struct YourTurnApp: App {
             )
             exit(0)
         }
+        // Update-check verification entry point. Only meaningful from the binary inside the
+        // .app: a bare `swift build` binary has no version to compare GitHub's answer against.
+        if CommandLine.arguments.contains("--update-check") {
+            UpdateCheck.cli()
+            exit(0)
+        }
         // Login-item verification entry point. Only meaningful from the binary inside the
         // .app — SMAppService answers for the bundle it's running in.
         if let index = CommandLine.arguments.firstIndex(of: "--login-item") {
@@ -56,14 +62,17 @@ struct YourTurnApp: App {
     @State private var stats = StatsStore()
     @State private var preferences = AppPreferences()
     @State private var navigation = Navigation()
+    @State private var updates = UpdateCheck()
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarPanel(store: store, preferences: preferences, navigation: navigation)
-                .themed(preferences.appearance)
-                .localized(preferences)
+            MenuBarPanel(
+                store: store, preferences: preferences, navigation: navigation, updates: updates
+            )
+            .themed(preferences.appearance)
+            .localized(preferences)
         } label: {
-            MenuBarLabel(badgeCount: store.badgeCount)
+            MenuBarLabel(badgeCount: store.badgeCount, updates: updates)
         }
         .menuBarExtraStyle(.window)
 
@@ -86,7 +95,7 @@ struct YourTurnApp: App {
         }
 
         Window(L("Settings"), id: SettingsWindow.id) {
-            SettingsWindow(store: store, preferences: preferences)
+            SettingsWindow(store: store, preferences: preferences, updates: updates)
                 .themed(preferences.appearance)
                 .localized(preferences)
                 .managesActivationPolicy()
@@ -137,18 +146,26 @@ private struct MenuBarLabel: View {
     /// Only counts "waiting for you": running sessions don't need you yet, and finished ones
     /// aren't urgent.
     let badgeCount: Int
+    let updates: UpdateCheck
 
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         // The menu bar icon must be a monochrome template image; the system handles
         // light/dark automatically.
+        // The icon and its badge answer one question — how many sessions are waiting for you.
+        // A pending update deliberately doesn't touch either: a second meaning would make the
+        // number something you have to stop and interpret. It surfaces in the "…" menu instead.
         // Verified against a real reopen: the label's `onAppear` does fire once, at launch,
         // before any window exists — which is what makes this a usable registration point,
         // and the only place `openWindow` can be reached from this early.
         Image(systemName: badgeCount > 0 ? "tray.full" : "tray")
             .onAppear {
                 AppDelegate.openInbox = { openWindow(id: MainWindow.id) }
+                // Checked from here for the same reason the launch window is: this label is
+                // the one piece of UI alive for the whole session. `UpdateCheck` carries its
+                // own per-launch latch, so a re-fired `onAppear` costs nothing.
+                Task { await updates.checkIfNeeded() }
                 // Every launch opens the window, login included. The alternative — a window
                 // on a click but not at login — needs the app to tell those apart, and macOS
                 // only offers `NSApplicationLaunchIsDefaultLaunchKey` for that, whose login

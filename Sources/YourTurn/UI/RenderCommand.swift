@@ -19,9 +19,18 @@ enum RenderCommand {
     static func run(to directory: String, demo: Bool = false) {
         let store = SessionStore()
         let preferences = AppPreferences()
+        let updates = UpdateCheck()
 
         if demo {
             store.loadDemo(DemoData.groups(now: Date()))
+            // A real render is quiet here — the copy being rendered is the current one — so the
+            // update notice's layout only exists to look at under --demo.
+            updates.loadDemo(
+                UpdateCheck.Release(
+                    version: "0.3.0",
+                    page: URL(string: "https://github.com/himynameisben/your-turn/releases/latest")!
+                )
+            )
             print("Demo data: \(store.groups.count) project(s), \(store.active.count) active session(s)")
         } else {
             // ImageRenderer won't wait for `.task`, so the data scan has to finish first, manually.
@@ -64,7 +73,7 @@ enum RenderCommand {
             write(view, to: outputDirectory.appendingPathComponent("\(appearance.rawValue).png"))
 
             preferences.appearance = appearance
-            let settings = SettingsPage(store: store, preferences: preferences)
+            let settings = SettingsPage(store: store, preferences: preferences, updates: updates)
                 .frame(width: 560, alignment: .topLeading)
                 .themed(appearance)
                 .environment(\.isOffscreenRender, true)

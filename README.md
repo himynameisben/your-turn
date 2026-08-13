@@ -78,10 +78,11 @@ Your Turn is a **reader**. Claude Code already writes everything it needs into
   whole files, but only counts token numbers — it still never looks at what you or
   Claude actually said
 - **No telemetry, no LLM calls** — nothing about you ever leaves your Mac
-- **One outbound request, and only if you open the Usage tab**: a plain GET for
-  LiteLLM's public price table, so new models don't show up unpriced. It sends nothing
-  but the request itself, and a trimmed copy ships inside the app so the numbers work
-  with the network off
+- **Two outbound requests, both plain GETs to public URLs that send nothing but the
+  request itself:** LiteLLM's price table, so new models don't show up unpriced (only if
+  you open the Usage tab; a trimmed copy ships inside the app so the numbers work with
+  the network off), and GitHub's releases API once a day, to notice when there's a newer
+  version than the one you're running
 - Preferences (stars, archive, appearance) live in UserDefaults / Application
   Support
 - Open source — audit it yourself

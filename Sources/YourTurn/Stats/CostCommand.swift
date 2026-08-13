@@ -8,9 +8,10 @@ import Foundation
 /// after a change. Output stability matters more than reading nicely in someone's language.
 ///
 /// `--cost --no-cache` forces a cold scan; without it the second run should be near-instant.
-/// `--cost --refresh-prices` exercises the one network call the app makes, which the window
-/// otherwise only fires once a day — the only way to see whether it still parses LiteLLM's
-/// current shape rather than silently falling back to the bundled snapshot.
+/// `--cost --refresh-prices` exercises the price download, which the window otherwise only
+/// fires once a day — the only way to see whether it still parses LiteLLM's current shape
+/// rather than silently falling back to the bundled snapshot. (`--update-check` is the same
+/// idea for the app's other request.)
 enum CostCommand {
     static func run(useCache: Bool = true, refreshPrices: Bool = false) {
         let cache = useCache ? UsageCache() : nil
