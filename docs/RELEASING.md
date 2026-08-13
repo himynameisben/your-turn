@@ -51,3 +51,17 @@ gh release create v<version> dist/YourTurn-<version>.zip \
 xcrun stapler validate dist/release-<version>/YourTurn.app
 spctl -a -vv dist/release-<version>/YourTurn.app   # → "Notarized Developer ID"
 ```
+
+That checks the staged bundle. To check what someone actually downloads, unpack the
+zip **with `ditto`, never `unzip`**:
+
+```bash
+cd "$(mktemp -d)" && ditto -x -k /path/to/YourTurn-<version>.zip .
+spctl -a -vv YourTurn.app                          # → "Notarized Developer ID"
+xcrun stapler validate YourTurn.app                # proves it works offline
+```
+
+`release.sh` packs with `ditto -c -k --keepParent`, and plain `unzip` drops the
+metadata the signature seals — it reports `a sealed resource is missing or invalid`
+on a release that is perfectly fine. `ditto -x -k` is what Finder and Archive Utility
+do when a user double-clicks the zip, so it's the only extraction worth testing.
