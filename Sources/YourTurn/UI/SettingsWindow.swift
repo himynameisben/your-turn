@@ -207,39 +207,15 @@ struct SettingsPage: View {
     }
 
     private var about: some View {
-        SettingRow(label: L("About"), note: aboutNote) {
+        SettingRow(label: L("About"), note: L("Reads session records from ~/.claude — read-only, never written to.")) {
             VStack(alignment: .leading, spacing: 7) {
                 Text(Self.appName)
                     .font(Theme.sessionTitle)
                     .foregroundStyle(theme.text)
                 if case .available(let release) = updates.state {
-                    updateLink(release)
+                    UpdateNotice(release: release)
                 }
             }
-        }
-    }
-
-    /// The note explains the notice exactly when the notice is there to explain — a standing
-    /// sentence about a daily network request would be noise on the 364 days it says nothing.
-    private var aboutNote: String {
-        if case .available = updates.state {
-            return L("A newer release is published on GitHub. Your Turn checks once a day and sends nothing with the request.")
-        }
-        return L("Reads session records from ~/.claude — read-only, never written to.")
-    }
-
-    /// `dotWaiting` is the palette's "this one needs you" amber, already carried by the row
-    /// dots — the same signal, so it should be the same colour.
-    @ViewBuilder
-    private func updateLink(_ release: UpdateCheck.Release) -> some View {
-        let label = Text(L("\(release.version) is available"))
-            .font(Theme.meta)
-            .foregroundStyle(Theme.dotWaiting)
-        if isOffscreenRender {
-            label
-        } else {
-            Button { NSWorkspace.shared.open(release.page) } label: { label }
-                .buttonStyle(.plain)
         }
     }
 
@@ -250,6 +226,74 @@ struct SettingsPage: View {
     private static var appName: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         return version.map { "Your Turn \($0)" } ?? "Your Turn"
+    }
+}
+
+/// "There's a newer one", plus both ways of getting it.
+///
+/// Two paths because there are two ways in — the zip from Releases and the Homebrew cask — and
+/// which one applies isn't something the app can tell: a cask-installed copy sits at exactly the
+/// same `/Applications` path as one dragged there by hand. Offering both beats guessing wrong and
+/// sending a `brew` user to a zip they'd have to unpack over their managed install.
+///
+/// The `brew` line prints the command itself rather than saying "copy the command": it's shorter
+/// than the sentence describing it, and someone who'd rather type it into a terminal they already
+/// have open can just read it.
+private struct UpdateNotice: View {
+    let release: UpdateCheck.Release
+
+    @Environment(\.theme) private var theme
+    @Environment(\.isOffscreenRender) private var isOffscreenRender
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            // `dotWaiting` is the palette's "this one needs you" amber, already carried by the
+            // session dots — same signal, so it should be the same colour.
+            Text(L("\(release.version) is available"))
+                .font(Theme.meta)
+                .foregroundStyle(Theme.dotWaiting)
+
+            HStack(spacing: 9) {
+                tappable(
+                    Text(L("Download"))
+                        .font(Theme.meta)
+                        .foregroundStyle(theme.muted)
+                ) { NSWorkspace.shared.open(release.page) }
+
+                Text("·")
+                    .font(Theme.meta)
+                    .foregroundStyle(theme.faint)
+
+                tappable(
+                    Text(copied ? L("Copied") : UpdateCheck.brewCommand)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(copied ? Theme.dotRunning : theme.muted)
+                ) { copyBrewCommand() }
+            }
+        }
+    }
+
+    /// `ImageRenderer` draws AppKit-backed controls as a yellow prohibition sign, so a render
+    /// gets the label without the button wrapped around it — same text, same place.
+    @ViewBuilder
+    private func tappable(_ label: some View, action: @escaping () -> Void) -> some View {
+        if isOffscreenRender {
+            label
+        } else {
+            Button(action: action) { label }.buttonStyle(.plain)
+        }
+    }
+
+    private func copyBrewCommand() {
+        UpdateCheck.copyBrewCommand()
+        copied = true
+        // Reverts on its own: a permanent "Copied" would leave the command unreadable for anyone
+        // who wanted to read it rather than paste it.
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            copied = false
+        }
     }
 }
 
