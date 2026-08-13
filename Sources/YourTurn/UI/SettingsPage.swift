@@ -1,47 +1,27 @@
 import AppKit
 import SwiftUI
 
-/// Settings window. All preferences are gathered here — the menu bar's "…" menu holds actions only.
-struct SettingsWindow: View {
-    static let id = "settings"
-
-    let store: SessionStore
-    let preferences: AppPreferences
-    let updates: UpdateCheck
-
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        ScrollView {
-            SettingsPage(store: store, preferences: preferences, updates: updates)
-        }
-        .background(theme.bg)
-        .frame(width: 560, height: 560)
-        // The `Window(L("Settings"), …)` title is evaluated in the App's scene builder, which
-        // the language scope can't reach — set it from inside the view so the title bar turns
-        // over with the rest of the window instead of staying in the old language.
-        .navigationTitle(L("Settings"))
-    }
-}
-
-/// Split out into a separate page for the same reason as `MainWindowPage`: `ImageRenderer`
-/// doesn't expand `ScrollView` — the content has to sit outside the ScrollView to render at all.
+/// The settings tab of the main window. All preferences are gathered here — the menu bar's "…"
+/// menu holds actions only.
+///
+/// This used to be a window of its own, 560pt wide with its own title and its own serif header.
+/// It's a page now: an app that lives in the menu bar shouldn't need two windows, and the
+/// settings had nothing in them that the main window's page couldn't hold. What that cost is one
+/// number — the label column went from 78 to `Theme.gutter`, so these rows hang off the same
+/// spine as the session list and the usage sections rather than a narrower one of their own.
 struct SettingsPage: View {
     let store: SessionStore
     let preferences: AppPreferences
     let updates: UpdateCheck
+    /// Owned by `Navigation`, not by this page: the menu bar panel's badge has to be able to open
+    /// the window with the sheet already up.
+    @Binding var showingUpdate: Bool
 
     @Environment(\.theme) private var theme
     @Environment(\.isOffscreenRender) private var isOffscreenRender
-    /// Local, unlike the main window's: this window has no second entry point that needs to open
-    /// it already presented.
-    @State private var showingUpdate = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
-            rule
-
             SettingRow(label: L("Appearance"), note: appearanceNote) {
                 PillPicker(
                     options: Appearance.allCases,
@@ -133,23 +113,13 @@ struct SettingsPage: View {
 
             about
         }
-        // The login item can be switched off in System Settings while this window is
-        // closed, so the switch is re-read on the way in rather than trusted.
+        // The login item can be switched off in System Settings while the app is elsewhere, so
+        // the switch is re-read every time this tab comes up rather than trusted.
         .onAppear { preferences.launchAtLogin.refresh() }
-        .updateSheet(updates.state, isPresented: $showingUpdate)
     }
 
     private var rule: some View {
         Rectangle().fill(theme.rule).frame(height: 1)
-    }
-
-    private var header: some View {
-        Text(L("Settings"))
-            .font(.system(size: 22, weight: .medium, design: .serif))
-            .foregroundStyle(theme.text)
-            .padding(.horizontal, 28)
-            .padding(.top, 26)
-            .padding(.bottom, 18)
     }
 
     /// Each appearance gets one line describing what it actually looks like.
@@ -251,7 +221,14 @@ private struct StaticValue: View {
     }
 }
 
-/// Right-aligned label on the left, control on the right — same skeleton as the main window's gutter, just narrower.
+/// Right-aligned label in the gutter, control on the right — the same spine as the session rows
+/// and `StatsRow`, which is the point of folding this page into the window: all three tabs hang
+/// their content off one vertical line instead of each having its own.
+///
+/// The note is capped at 420pt rather than running to the window's edge. These are sentences, and
+/// a sentence set 700pt wide at 11pt is measurably harder to track back to the next line — the
+/// old 560pt window happened to enforce that, and widening the page removed the constraint
+/// without removing the reason for it.
 private struct SettingRow<Content: View>: View {
     let label: String
     var note: String?
@@ -260,13 +237,13 @@ private struct SettingRow<Content: View>: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        HStack(alignment: .top, spacing: 18) {
-            // 78, not 62: "Appearance" was the one label that didn't fit, and truncating
-            // it to "Appeara…" made the settings page look broken.
+        HStack(alignment: .top, spacing: 0) {
             Text(label)
                 .font(Theme.projectName)
                 .foregroundStyle(theme.muted)
-                .frame(width: 78, alignment: .trailing)
+                .lineLimit(1)
+                .frame(width: Theme.gutter, alignment: .trailing)
+                .padding(.trailing, 22)
                 .padding(.top, 7)
 
             VStack(alignment: .leading, spacing: 8) {
@@ -276,12 +253,13 @@ private struct SettingRow<Content: View>: View {
                         .font(Theme.meta)
                         .foregroundStyle(theme.faint)
                         .lineSpacing(2)
+                        .frame(maxWidth: 420, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.trailing, Theme.pageInset)
         }
-        .padding(.horizontal, 28)
         .padding(.vertical, 18)
     }
 }

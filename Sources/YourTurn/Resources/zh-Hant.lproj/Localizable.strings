@@ -44,6 +44,8 @@
 "Open a new window to resume" = "開新視窗接續";
 "Waiting for you: %@" = "等你回答：%@";
 "Settings" = "設定";
+"SETTINGS" = "設定";
+"How Your Turn behaves." = "Your Turn 怎麼運作。";
 
 /* MARK: - Session */
 "your response" = "你的回覆";

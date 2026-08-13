@@ -91,19 +91,11 @@ struct YourTurnApp: App {
         }
         .defaultSize(width: 860, height: 660)
         .commands {
-            // Replaces the system's default "Settings…" item so Cmd-, opens our own settings window.
+            // Replaces the system's default "Settings…" item so Cmd-, lands on our settings tab.
             CommandGroup(replacing: .appSettings) {
-                SettingsCommandButton()
+                SettingsCommandButton(navigation: navigation)
             }
         }
-
-        Window(L("Settings"), id: SettingsWindow.id) {
-            SettingsWindow(store: store, preferences: preferences, updates: updates)
-                .themed(preferences.appearance)
-                .localized(preferences)
-                .managesActivationPolicy()
-        }
-        .windowResizability(.contentSize)
     }
 }
 
@@ -186,10 +178,15 @@ private struct MenuBarLabel: View {
 /// builder itself isn't a view environment, so reading environment values directly inside it
 /// doesn't work.
 private struct SettingsCommandButton: View {
+    let navigation: Navigation
+
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Button(L("Settings…")) { openWindow(id: SettingsWindow.id) }
-            .keyboardShortcut(",", modifiers: .command)
+        Button(L("Settings…")) {
+            navigation.mode = .settings
+            openWindow(id: MainWindow.id)
+        }
+        .keyboardShortcut(",", modifiers: .command)
     }
 }

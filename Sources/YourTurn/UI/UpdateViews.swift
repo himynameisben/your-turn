@@ -47,6 +47,10 @@ struct UpdateBadge: View {
         .background(theme.waitingChip.bg, in: .capsule)
         .opacity(isHovering ? 0.82 : 1)
         .contentShape(.capsule)
+        // Same reason `PillPicker` is fixed: measured at the window's minimum width, the badge
+        // was the next thing to give once the pills stopped compressing, and it degraded through
+        // "Up…" to a bare arrow. A chip nobody can read is not a smaller chip.
+        .fixedSize()
     }
 }
 
