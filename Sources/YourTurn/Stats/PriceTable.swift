@@ -53,8 +53,9 @@ struct PriceTable: Sendable, Equatable {
 
     /// Downloads LiteLLM's table, trims it to the Anthropic models, and caches the result.
     ///
-    /// This is the app's only network request. It sends a bare GET to a public GitHub raw URL
-    /// and carries nothing about the user — no session data, no project names, no counts.
+    /// One of the app's two network requests (the other is `UpdateCheck`). It sends a bare GET
+    /// to a public GitHub raw URL and carries nothing about the user — no session data, no
+    /// project names, no counts.
     /// Failure is not an error state: the bundled snapshot already priced everything, so a
     /// refresh that doesn't come back just leaves the numbers as they were.
     static func refresh() async -> PriceTable? {

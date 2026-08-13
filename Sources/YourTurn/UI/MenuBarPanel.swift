@@ -32,6 +32,7 @@ struct MenuBarPanel: View {
     let store: SessionStore
     let preferences: AppPreferences
     let navigation: Navigation
+    let updates: UpdateCheck
 
     @Environment(\.openWindow) private var openWindow
     @Environment(\.theme) private var theme
@@ -126,7 +127,7 @@ struct MenuBarPanel: View {
                 .buttonStyle(.plain)
                 .font(Theme.meta)
                 .foregroundStyle(theme.muted)
-            SettingsMenu(navigation: navigation)
+            SettingsMenu(navigation: navigation, updates: updates)
                 .padding(.leading, 14)
         }
         .padding(.leading, Panel.inset)
@@ -274,11 +275,19 @@ struct SessionMenu: View {
 /// across two places would leave you unsure where to change what.
 struct SettingsMenu: View {
     let navigation: Navigation
+    let updates: UpdateCheck
 
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Menu {
+            // Only ever present when there's something to say. An always-visible "Check for
+            // Updates…" would be a permanent item that reports "you're up to date" every time
+            // it's used, in an app whose whole point is not making you check things.
+            if case .available(let release) = updates.state {
+                Button(L("Update to \(release.version)…")) { NSWorkspace.shared.open(release.page) }
+                Divider()
+            }
             // Opens the main window *onto* the usage tab — which is the whole reason the
             // selected page lives in `Navigation` rather than in the window's own `@State`.
             Button(L("Usage")) {

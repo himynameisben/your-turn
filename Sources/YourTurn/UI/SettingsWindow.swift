@@ -7,12 +7,13 @@ struct SettingsWindow: View {
 
     let store: SessionStore
     let preferences: AppPreferences
+    let updates: UpdateCheck
 
     @Environment(\.theme) private var theme
 
     var body: some View {
         ScrollView {
-            SettingsPage(store: store, preferences: preferences)
+            SettingsPage(store: store, preferences: preferences, updates: updates)
         }
         .background(theme.bg)
         .frame(width: 560, height: 560)
@@ -28,6 +29,7 @@ struct SettingsWindow: View {
 struct SettingsPage: View {
     let store: SessionStore
     let preferences: AppPreferences
+    let updates: UpdateCheck
 
     @Environment(\.theme) private var theme
     @Environment(\.isOffscreenRender) private var isOffscreenRender
@@ -205,10 +207,39 @@ struct SettingsPage: View {
     }
 
     private var about: some View {
-        SettingRow(label: L("About"), note: L("Reads session records from ~/.claude — read-only, never written to.")) {
-            Text(Self.appName)
-                .font(Theme.sessionTitle)
-                .foregroundStyle(theme.text)
+        SettingRow(label: L("About"), note: aboutNote) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text(Self.appName)
+                    .font(Theme.sessionTitle)
+                    .foregroundStyle(theme.text)
+                if case .available(let release) = updates.state {
+                    updateLink(release)
+                }
+            }
+        }
+    }
+
+    /// The note explains the notice exactly when the notice is there to explain — a standing
+    /// sentence about a daily network request would be noise on the 364 days it says nothing.
+    private var aboutNote: String {
+        if case .available = updates.state {
+            return L("A newer release is published on GitHub. Your Turn checks once a day and sends nothing with the request.")
+        }
+        return L("Reads session records from ~/.claude — read-only, never written to.")
+    }
+
+    /// `dotWaiting` is the palette's "this one needs you" amber, already carried by the row
+    /// dots — the same signal, so it should be the same colour.
+    @ViewBuilder
+    private func updateLink(_ release: UpdateCheck.Release) -> some View {
+        let label = Text(L("\(release.version) is available"))
+            .font(Theme.meta)
+            .foregroundStyle(Theme.dotWaiting)
+        if isOffscreenRender {
+            label
+        } else {
+            Button { NSWorkspace.shared.open(release.page) } label: { label }
+                .buttonStyle(.plain)
         }
     }
 

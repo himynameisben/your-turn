@@ -90,6 +90,11 @@
 "About" = "關於";
 "Reads session records from ~/.claude — read-only, never written to." = "讀取 ~/.claude 的 session 紀錄，對它只讀不寫。";
 
+/* MARK: - Update notice */
+"%@ is available" = "有 %@ 可用";
+"A newer release is published on GitHub. Your Turn checks once a day and sends nothing with the request." = "GitHub 上有更新的版本。Your Turn 每天查一次，請求本身不帶任何資料。";
+"Update to %@…" = "更新到 %@…";
+
 "Follows the system's light/dark setting. The system is currently dark." = "跟著系統的淺色／深色走。目前系統是深色。";
 "Follows the system's light/dark setting. The system is currently light." = "跟著系統的淺色／深色走。目前系統是淺色。";
 "Cream-paper white — the brightest of the three." = "米白紙，最亮的一組。";

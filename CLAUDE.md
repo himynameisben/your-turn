@@ -37,10 +37,11 @@ that directory is wiped.
 | `--next` | Quality stats for next-step extraction (pending / clear / unknown ratio) |
 | `--cost [--no-cache] [--refresh-prices]` | Print the usage pipeline: scan timings, dedup counts, total spend, per model / per project / per day, rhythm. `--no-cache` forces a cold scan so both paths can be compared; `--refresh-prices` fires the LiteLLM download the window otherwise only attempts once a day |
 | `--login-item [on\|off]` | Read or flip the "start at login" registration. Only meaningful from the binary **inside** the .app (`/Applications/YourTurn.app/Contents/MacOS/YourTurn`) — `SMAppService` answers for the bundle it runs in, and there's no other way to check: these registrations don't show up in AppleScript's login-item list, and the system's database needs root |
+| `--update-check` | Print the running version, GitHub's latest release, the verdict, and the version-ordering table (including the two pairs a string comparison gets wrong). Always fetches, ignoring the daily throttle. Also prints what the **app** last stored and how that resolves — the only way to see whether the launch-time check fired, since a machine that's up to date has no UI at all. Seed `updateCheckLatestVersion` / `updateCheckLatestPage` in UserDefaults to exercise the notice without publishing a release |
 | `--render <dir> [--demo]` | Offscreen-render the main window (session tabs **and** the Usage tab, via `MainWindowPage` with the mode pinned, so the PNG is literally the page a user sees) plus the settings page, in every palette. `--demo` renders invented sessions and invented usage instead of the real scan — **required for anything published**, since a real scan puts your own titles, prompts, summaries and actual spend in the picture |
 
-**Session-layer changes: run `--dump`. Usage-layer changes: run `--cost`. Layout
-changes: run `--render`.** Layout cannot
+**Session-layer changes: run `--dump`. Usage-layer changes: run `--cost`. Update-layer
+changes: run `--update-check`. Layout changes: run `--render`.** Layout cannot
 be eyeballed — `--render` is the only way to actually see the result
 (`LSUIElement` windows can't be captured reliably with `screencapture`).
 
@@ -61,7 +62,8 @@ Sources/YourTurn/
 │   ├── SessionStore.swift      @Observable, the UI's single source of truth
 │   ├── SummaryText.swift       extracts the "next step" sentence from away_summary
 │   ├── AppPreferences.swift    terminal / editor / appearance / language preferences
-│   └── LaunchAtLogin.swift     start-at-login, via SMAppService — state lives in macOS, not UserDefaults
+│   ├── LaunchAtLogin.swift     start-at-login, via SMAppService — state lives in macOS, not UserDefaults
+│   └── UpdateCheck.swift       is a newer release out? GitHub releases API, daily, never installs anything
 ├── Stats/                      the second pipeline: what it cost, how the days went
 │   ├── UsageScanner.swift      full-file scan incl. subagents/, byte prefilter + concurrentPerform
 │   ├── UsageRecord.swift       one deduplicated request, split into per-model segments
@@ -140,6 +142,26 @@ comments in the corresponding file (they carry the numbers).
   user can switch it off in System Settings without the app hearing about it; a cached
   `true` would then contradict macOS. Read `status` every time, and re-read it whenever
   the settings window appears.
+- **The update check points at a release, it never installs one** — the standard answer is
+  Sparkle, which is a third-party framework, an appcast, a second signing key and an installer
+  helper. What's actually missing without one is much smaller: nobody quits a menu bar app, so
+  a 0.1.0 user never finds out 0.2.0 exists. `UpdateCheck` reads `/releases/latest` (already
+  excludes drafts and prereleases), compares two numbers, and opens the release page. Homebrew
+  users get the real thing from `brew upgrade`.
+- **Compare versions numerically, never as strings** — "0.10.0" sorts *before* "0.9.0"
+  lexicographically, so the app would go silent exactly when it finally had news.
+  `--update-check` prints the ordering table and flags the pairs string comparison gets wrong.
+- **Nothing about updates touches the menu bar badge** — the icon and its number answer one
+  question, "how many sessions are waiting for you". A second meaning turns a glanceable count
+  into something you have to stop and interpret. The notice lives in the "…" menu and the
+  settings About row, and only exists when there's something to say — there is no
+  "Check for Updates…" item and no "you're up to date" state anywhere in the UI.
+- **The daily stamp is written only on success** — a failed request already can't repeat before
+  the next launch (`checkedThisLaunch`), so stamping failures too would mean a laptop that was
+  offline this morning stays quiet all day after the network comes back.
+- **No "dismissed" flag** — the cached release is re-compared against the running version on
+  every launch, so installing the update clears the notice by itself. Stored state that can
+  disagree with what's actually installed is the same trap as `LaunchAtLogin`'s.
 - **Palettes are data, not light/dark** — three palettes flow down via the `\.theme`
   environment value; views never check `colorScheme` themselves.
 - **A pinned Dock icon needs `applicationShouldHandleReopen`** — `LSUIElement` means there's
