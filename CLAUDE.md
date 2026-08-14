@@ -198,6 +198,15 @@ comments in the corresponding file (they carry the numbers).
   launch, before any window exists, and it's the one piece of UI alive for the whole session
   (both windows can close, and the panel is only built when the menu is opened). Verified by
   `lsappinfo`: `UIElement` with no window → reopen → `Foreground`.
+- **Full screen has to be handed back, and re-handed back** — `LSUIElement` also costs the
+  window its green button. Measured: `collectionBehavior` settles at 131328, `.auxiliary` +
+  `.fullScreenAuxiliary` with no `.fullScreenPrimary` — a window that may join someone else's
+  full-screen space but can't own one, so the button is left with plain zoom. It isn't the
+  activation policy at birth (promoting to `.regular` before `openWindow` measures the same
+  131328), and it isn't a stamp that can be corrected once: AppKit rewrote the behavior three
+  times in the first half-second, the last at ~0.4s, dropping the flag each time. So
+  `allowsFullScreen()` re-asserts it from a KVO observer on `collectionBehavior` rather than
+  from any fixed delay — verified to hold at 131456 across a close and reopen.
 - **Every launch opens the window, login included** — one rule, no exceptions, chosen for
   consistency: the same gesture must not depend on whether the app happens to already be
   running, which is state the user can't see. The alternative (a window on a click but not at
