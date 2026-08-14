@@ -88,6 +88,9 @@ struct YourTurnApp: App {
                 // "the last window closed" and drop the app back to `.accessory` — that would
                 // send both windows behind whatever else is on screen mid-switch.
                 .managesActivationPolicy()
+                // Also a property of the window rather than of what's in it, so it belongs out
+                // here beside the policy rather than inside the localized subtree.
+                .allowsFullScreen()
         }
         .defaultSize(width: 860, height: 660)
         .commands {

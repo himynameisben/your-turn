@@ -117,6 +117,52 @@ extension View {
         onAppear { ActivationPolicy.windowOpened() }
             .onDisappear { ActivationPolicy.windowClosed() }
     }
+
+    func allowsFullScreen() -> some View { background(FullScreenEnabler()) }
+}
+
+/// `LSUIElement` costs the window its green button, and no SwiftUI modifier gives it back.
+///
+/// Measured on the real window: `collectionBehavior` settles at 131328 — `.auxiliary` plus
+/// `.fullScreenAuxiliary`, with no `.fullScreenPrimary`. AppKit stamps that on every window an
+/// `LSUIElement` app opens. An auxiliary window may *join* another app's full-screen space but
+/// can't own one, so the green button is left with plain zoom (measured: it does fill the
+/// visible frame, the screen minus the menu bar) and there's no "Enter Full Screen" anywhere.
+///
+/// Two things it is *not*, both measured before settling on this: it isn't the activation
+/// policy at the moment the window is born — promoting to `.regular` before `openWindow` gives
+/// the same 131328 — and it isn't a one-time stamp that can be corrected afterwards. AppKit
+/// rewrote the behavior three times over the first half-second of a launch, the last at ~0.4s,
+/// each time dropping the flag again; any fixed delay is a guess about a machine that isn't
+/// this one.
+///
+/// So the flag is re-asserted from a KVO observer instead, which is timing-free and also covers
+/// the rewrite that comes with every activation-policy flip — one per window open and close.
+/// The `contains` check is what stops it recursing: the insert is itself a change.
+private final class FullScreenEnablingView: NSView {
+    private var observation: NSKeyValueObservation?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let window else {
+            observation = nil
+            return
+        }
+        Self.allowFullScreen(window)
+        observation = window.observe(\.collectionBehavior) { window, _ in
+            MainActor.assumeIsolated { Self.allowFullScreen(window) }
+        }
+    }
+
+    private static func allowFullScreen(_ window: NSWindow) {
+        guard !window.collectionBehavior.contains(.fullScreenPrimary) else { return }
+        window.collectionBehavior.insert(.fullScreenPrimary)
+    }
+}
+
+private struct FullScreenEnabler: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { FullScreenEnablingView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 /// True only under `--render`.
