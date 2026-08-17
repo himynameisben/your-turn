@@ -18,6 +18,10 @@ import SwiftUI
 enum RenderCommand {
     static func run(to directory: String, demo: Bool = false) {
         let store = SessionStore()
+        // The session-list frames draw the masthead's allowance rings, so they need a reading —
+        // and only a reading. Under --demo it's invented, for the same reason the sessions are:
+        // a published screenshot must not say how much of a real week is already spent.
+        let sessionStats = StatsStore()
         let preferences = AppPreferences()
         let updates = UpdateCheck()
         /// A second, deliberately empty one for the pages that get published.
@@ -25,6 +29,7 @@ enum RenderCommand {
 
         if demo {
             store.loadDemo(DemoData.groups(now: Date()))
+            sessionStats.loadDemoQuotas(DemoData.quotas(now: Date()))
             // A real render is quiet here — the copy being rendered is the current one — so the
             // update notice's layout only exists to look at under --demo.
             updates.loadDemo(
@@ -43,6 +48,9 @@ enum RenderCommand {
             while !done {
                 RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
             }
+            sessionStats.loadDemoQuotas(
+                ClaudeQuotaReader.read() + CodexQuotaReader.read(sessions: store.sessions)
+            )
             print("Scanned \(store.groups.count) project(s), \(store.active.count) active session(s)")
         }
 
@@ -59,9 +67,9 @@ enum RenderCommand {
             let palette = appearance.theme(system: .light)
             let view = MainWindowPage(
                 store: store,
-                // The session pages never read it; a blank store keeps the scan out of the
-                // session screenshots entirely.
-                stats: StatsStore(),
+                // Allowance rings only. A full StatsStore here would drag the 1.0GB usage scan
+                // into every session screenshot.
+                stats: sessionStats,
                 preferences: preferences,
                 // Quiet on purpose, even under --demo: these are the shots that get published,
                 // and an "Update" badge in the README implies the app in the picture is stale.
@@ -108,7 +116,7 @@ enum RenderCommand {
         // and the headline is what has to give way, so this is the frame that proves it does.
         let narrow = MainWindowPage(
             store: store,
-            stats: StatsStore(),
+            stats: sessionStats,
             preferences: preferences,
             updates: updates,
             mode: .constant(.byProject),
@@ -122,11 +130,55 @@ enum RenderCommand {
         .background(Theme.paper.bg)
         write(narrow, to: outputDirectory.appendingPathComponent("light-narrow.png"))
 
+        // The masthead before anyone has switched the bridge on — a dashed ring where a reading
+        // would be. Same reasoning as `light-usage-month.png` and the update badge: it's a state
+        // that only exists before a setting is touched, so no screenshot of the default demo
+        // would ever contain it, and it's the first thing a new user actually sees.
+        let unset = StatsStore()
+        unset.loadDemoQuotas(DemoData.quotas(now: Date()).filter { $0.agent != .claude })
+        let setup = MainWindowPage(
+            store: store,
+            stats: unset,
+            preferences: preferences,
+            updates: quiet,
+            mode: .constant(.byProject),
+            query: .constant(""),
+            now: Date(),
+            showingUpdate: .constant(false)
+        )
+        .frame(width: 1000, alignment: .topLeading)
+        .themed(.light)
+        .environment(\.isOffscreenRender, true)
+        .background(Theme.paper.bg)
+        write(setup, to: outputDirectory.appendingPathComponent("light-allowance-setup.png"))
+
+        // Resting above, hovered below, same width, same everything else. The rings have to sit at
+        // the same x in both — the first version of this row put the detail *before* them, so
+        // arriving with the cursor pushed them right, out from under it, which ended the hover and
+        // pushed them back. That loop ran at refresh rate and repainted the whole page each time.
+        // A frame of the resting state alone could never have shown it.
+        let quotas = DemoData.quotas(now: Date())
+        let hover = VStack(alignment: .leading, spacing: 26) {
+            MastheadKicker(dateline: "August 17 · Monday", quotas: quotas, now: Date()) { _ in }
+            MastheadKicker(
+                dateline: "August 17 · Monday", quotas: quotas, now: Date(), onSelect: { _ in },
+                initialHover: .quota(quotas[1])
+            )
+        }
+        .padding(.horizontal, Theme.pageInset)
+        .padding(.vertical, 24)
+        .frame(width: 720, alignment: .topLeading)
+        .themed(.light)
+        .environment(\.isOffscreenRender, true)
+        .background(Theme.paper.bg)
+        write(hover, to: outputDirectory.appendingPathComponent("light-allowance-hover.png"))
+
         renderStats(
             to: outputDirectory, demo: demo, store: store, preferences: preferences, quiet: quiet
         )
         renderUpdate(
-            to: outputDirectory, updates: updates, preferences: preferences, store: store
+            to: outputDirectory, updates: updates, preferences: preferences,
+            store: store, stats: sessionStats
         )
     }
 
@@ -138,7 +190,8 @@ enum RenderCommand {
     /// at on warm black — while the badge-in-context frame is light only, since what's being
     /// checked there is alignment against the gear button and the tab picker.
     private static func renderUpdate(
-        to directory: URL, updates: UpdateCheck, preferences: AppPreferences, store: SessionStore
+        to directory: URL, updates: UpdateCheck, preferences: AppPreferences,
+        store: SessionStore, stats: StatsStore
     ) {
         guard case .available(let release) = updates.state else {
             print("Update: nothing pending, skipping the update frames")
@@ -155,7 +208,7 @@ enum RenderCommand {
 
         let badged = MainWindowPage(
             store: store,
-            stats: StatsStore(),
+            stats: stats,
             preferences: preferences,
             updates: updates,
             mode: .constant(.byProject),
@@ -214,6 +267,27 @@ enum RenderCommand {
             write(page, to: directory.appendingPathComponent("\(appearance.rawValue)-usage.png"))
         }
 
+        // The same page at the window's 720pt minimum, for the same reason `light-narrow.png`
+        // exists one page over. The allowance row is the one here that can't simply wrap: a
+        // fixed label, a bar, a percentage and a reset time on one line, and the reset time grew
+        // from a countdown ("in 1d") to a wall clock ("Aug 19 at 8:00 AM"). Whether that still
+        // fits is a question only this frame answers.
+        let narrow = MainWindowPage(
+            store: store,
+            stats: stats,
+            preferences: preferences,
+            updates: quiet,
+            mode: .constant(.usage),
+            query: .constant(""),
+            now: Date(),
+            showingUpdate: .constant(false)
+        )
+        .frame(width: 720, alignment: .topLeading)
+        .themed(.light)
+        .environment(\.isOffscreenRender, true)
+        .background(Theme.paper.bg)
+        write(narrow, to: directory.appendingPathComponent("light-usage-narrow.png"))
+
         // One extra frame with a month selected. The filtered layout differs in three places
         // — the stepper appears, the three tiles change meaning, and the heatmap dims
         // everything outside the selection — and none of that is visible in a screenshot of
@@ -247,7 +321,7 @@ enum RenderCommand {
         let stats = StatsStore()
         stats.period = period
         guard !demo else {
-            stats.loadDemo(DemoData.usage(now: Date()), quota: DemoData.quota(now: Date()))
+            stats.loadDemo(DemoData.usage(now: Date()), quotas: DemoData.quotas(now: Date()))
             return stats
         }
         var done = false
@@ -289,14 +363,30 @@ enum RenderCommand {
 /// of hardcoding the line the UI ends up showing.
 private enum DemoData {
     /// Invented, like everything else here — a real reading would publish how much of someone's
-    /// actual Codex allowance they've burned this week.
-    static func quota(now: Date) -> CodexQuota {
-        CodexQuota(
-            usedPercent: 46,
-            windowMinutes: 10080,
-            resetsAt: now.addingTimeInterval(3.2 * 86_400),
-            observedAt: now.addingTimeInterval(-12 * 60)
-        )
+    /// actual allowance they've burned this week.
+    ///
+    /// All three rows, and one of them below the 20% line, because the amber bar is a state a
+    /// screenshot of a comfortable week would never show.
+    static func quotas(now: Date) -> [AgentQuota] {
+        [
+            AgentQuota(
+                agent: .claude, usedPercent: 38, windowMinutes: 5 * 60,
+                resetsAt: now.addingTimeInterval(2.4 * 3600),
+                observedAt: now.addingTimeInterval(-4 * 60)
+            ),
+            AgentQuota(
+                agent: .claude, usedPercent: 84, windowMinutes: 7 * 24 * 60,
+                resetsAt: now.addingTimeInterval(1.6 * 86_400),
+                observedAt: now.addingTimeInterval(-4 * 60)
+            ),
+            // Deliberately stale enough to earn the "measured …" half of the footnote: that is
+            // the long variant of the row, and the one the 720pt frame has to prove still fits.
+            AgentQuota(
+                agent: .codex, usedPercent: 46, windowMinutes: 10080,
+                resetsAt: now.addingTimeInterval(3.2 * 86_400),
+                observedAt: now.addingTimeInterval(-3.4 * 3600)
+            ),
+        ]
     }
 
     static func groups(now: Date) -> [ProjectGroup] {

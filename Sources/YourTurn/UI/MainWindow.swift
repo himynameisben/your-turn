@@ -55,6 +55,7 @@ struct MainWindow: View {
                 store: store,
                 stats: stats,
                 preferences: preferences,
+                navigation: navigation,
                 updates: updates,
                 mode: Bindable(navigation).mode,
                 query: $query,
@@ -67,14 +68,22 @@ struct MainWindow: View {
         // Presented from the window, not the page: the page is what `--render` rasterizes, and a
         // sheet modifier there would attach to a view that never gets a window to hang off.
         .updateSheet(updates.state, isPresented: Bindable(navigation).showingUpdate)
-        .task { await store.refresh() }
+        .task {
+            await store.refresh()
+            await stats.refreshQuotas(sessions: store.sessions)
+        }
         .onReceive(ticker) { tick in
             now = tick
             // Only the session scan is on this timer. Usage is far heavier and re-reads
-            // nothing on its own — see `StatsStore.loadIfNeeded`.
-            Task { await store.refresh() }
+            // nothing on its own — see `StatsStore.loadIfNeeded`. The allowance rides along
+            // because it is two file reads and it lives in the masthead, which is on screen.
+            Task {
+                await store.refresh()
+                await stats.refreshQuotas(sessions: store.sessions)
+            }
         }
     }
+
 }
 
 /// Which page the main window is showing.
@@ -94,6 +103,17 @@ final class Navigation {
     /// Also set by the menu bar panel's badge, which opens the window *with the sheet already up* —
     /// same reason `mode` lives here rather than in the window's `@State`.
     var showingUpdate = false
+
+    /// A row the window should scroll to once it exists. Set by the masthead's allowance rings,
+    /// cleared by that row's own `onAppear` — a request, not a position, so nothing here can
+    /// disagree with where the page actually is.
+    var pendingScroll: String?
+
+    /// Switch to a page and ask to land on one of its rows.
+    func open(_ mode: MainWindow.Mode, scrollingTo anchor: String? = nil) {
+        self.mode = mode
+        pendingScroll = anchor
+    }
 }
 
 /// The whole scrollable page inside the window.
@@ -106,6 +126,8 @@ struct MainWindowPage: View {
     let store: SessionStore
     let stats: StatsStore
     let preferences: AppPreferences
+    /// Optional so `--render` can rasterize this page without one; the rings simply don't respond.
+    var navigation: Navigation?
     let updates: UpdateCheck
     @Binding var mode: MainWindow.Mode
     @Binding var query: String
@@ -124,7 +146,7 @@ struct MainWindowPage: View {
             Rectangle().fill(theme.rule).frame(height: 1)
 
             if mode == .usage {
-                UsageSections(store: stats, now: now)
+                UsageSections(store: stats, now: now, navigation: navigation)
                     // Scans on arrival, not on the window's 30-second timer — and
                     // `loadIfNeeded` skips the work entirely when you flip back within a
                     // minute, so switching tabs stays free.
@@ -151,10 +173,15 @@ struct MainWindowPage: View {
     private var masthead: some View {
         HStack(alignment: .top, spacing: 24) {
             VStack(alignment: .leading, spacing: 12) {
-                Text(datelineText)
-                    .font(Theme.meta)
-                    .tracking(0.6)
-                    .foregroundStyle(theme.faint)
+                MastheadKicker(
+                    dateline: datelineText,
+                    // Only on the session list. The Usage tab draws the same numbers in full a
+                    // screen below, and a control whose whole job is "take me there" has nothing
+                    // to offer once you're already there.
+                    quotas: mode.isSessionList ? stats.quotas : [],
+                    now: now,
+                    onSelect: select
+                )
                 Text(headlineText)
                     .font(Theme.display)
                     .foregroundStyle(theme.text)
@@ -184,6 +211,16 @@ struct MainWindowPage: View {
         .padding(.horizontal, Theme.pageInset)
         .padding(.top, 30)
         .padding(.bottom, 26)
+    }
+
+    /// A reading takes you to the row it came from; the empty slot takes you to the switch that
+    /// would fill it. Both are one click, because "you have no Claude number" and "here is how to
+    /// get one" are the same sentence from where the cursor is.
+    private func select(_ item: AllowanceRings.Item) {
+        switch item {
+        case .quota: navigation?.open(.usage, scrollingTo: UsageSections.allowanceAnchor)
+        case .setup: navigation?.open(.settings)
+        }
     }
 
     /// Each tab names itself in the kicker. Settings gets a fixed pair rather than anything
@@ -308,6 +345,179 @@ struct MainWindowPage: View {
                 Rectangle().fill(theme.rule).frame(height: 1)
             }
         }
+    }
+}
+
+// MARK: - Masthead kicker
+
+/// The small line above the headline: the date, the allowance rings, and — while the cursor is on
+/// one — what that ring says.
+///
+/// **A view of its own, holding the hover state, for two reasons that both showed up the moment
+/// this was used with a real mouse.**
+///
+/// The first is cost. Kept in `MainWindowPage`, every hover invalidated that whole body: the
+/// masthead, thirty-odd project blocks and every session line under them. One line of the header
+/// should not repaint the page it sits on.
+///
+/// The second is worse, and it's why the detail is drawn *after* the rings instead of replacing
+/// the dateline. Swapping the dateline changes its width, the rings sit after it in the row, and
+/// so they slid right the instant the cursor arrived — out from under the cursor, which ended the
+/// hover, which restored the short text, which slid them back under it. A layout feedback loop
+/// running at refresh rate, repainting everything each time round: it beachballed. Nothing before
+/// the rings changes size now, so nothing can move them.
+struct MastheadKicker: View {
+    let dateline: String
+    let quotas: [AgentQuota]
+    let now: Date
+    let onSelect: (AllowanceRings.Item) -> Void
+
+    @Environment(\.theme) private var theme
+    @State private var hovered: AllowanceRings.Item?
+
+    /// `initialHover` exists for `--render` alone. The bug this view was rewritten for was a
+    /// layout bug that only appeared under the cursor, and a screenshot of the resting state
+    /// could never have shown it — so the hovered state gets a frame of its own, where the two
+    /// are stacked and the rings either line up or they don't.
+    init(
+        dateline: String,
+        quotas: [AgentQuota],
+        now: Date,
+        onSelect: @escaping (AllowanceRings.Item) -> Void,
+        initialHover: AllowanceRings.Item? = nil
+    ) {
+        self.dateline = dateline
+        self.quotas = quotas
+        self.now = now
+        self.onSelect = onSelect
+        _hovered = State(initialValue: initialHover)
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text(dateline)
+                .font(Theme.meta)
+                .tracking(0.6)
+                .foregroundStyle(theme.faint)
+                .lineLimit(1)
+                .fixedSize()
+
+            if !quotas.isEmpty {
+                AllowanceRings(quotas: quotas, now: now, hovered: $hovered, onSelect: onSelect)
+
+                if let hovered {
+                    Text(hovered.summary())
+                        .font(Theme.meta)
+                        .tracking(0.6)
+                        .foregroundStyle(theme.muted)
+                        .lineLimit(1)
+                        // Everything to the left of this is fixed width, so this can only ever
+                        // grow into the empty half of the row — and at the window's 720pt minimum,
+                        // where there is less of that, it truncates instead of pushing.
+                        .transition(.opacity)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .animation(.easeOut(duration: 0.1), value: hovered)
+    }
+}
+
+// MARK: - Allowance rings
+
+/// The allowance, in the masthead, as one ring per window.
+///
+/// Up here rather than only on the Usage tab because "is there room to start something" is a
+/// question you have *before* you pick a session, and a tab you have to remember to open is a
+/// number you never see. Rings rather than the bars used below: three bars wide enough to read
+/// would take the headline's line, and at 18pt a gauge that isn't full is legible without reading
+/// anything at all.
+///
+/// The detail is printed by the dateline this sits next to — same row, same font, so revealing it
+/// moves nothing on the page and it's already where the eye is. `.help()` carries the same text
+/// for anyone who waits instead of reading, and a popover was not used: it would be a floating
+/// panel over a window whose whole design is flat.
+struct AllowanceRings: View {
+    enum Item: Equatable, Identifiable {
+        case quota(AgentQuota)
+        /// No Claude reading — either the bridge is off, or it's on and Claude Code hasn't
+        /// replied since. Both end at the same row of the settings page, which explains both.
+        case setup
+
+        var id: String {
+            switch self {
+            case .quota(let quota): quota.id
+            case .setup: "setup"
+            }
+        }
+
+        /// What the dateline is swapped for. Kept to roughly the length of a date, because the
+        /// dateline is one line at the window's 720pt minimum and a detail that truncates to
+        /// "Claude · 7-d…" is worse than the date it replaced. The reset time is the part that
+        /// gives way — it's in the tooltip, and in full on the page the ring links to.
+        func summary() -> String {
+            guard case .quota(let quota) = self else { return L("Claude allowance — not set up") }
+            let left = L("\(StatsFormat.percentUsed(quota.remainingPercent)) left")
+            return "\(quota.agent.label) · \(quota.windowLabel) — \(left)"
+        }
+
+        func detail(now: Date) -> String {
+            guard case .quota(let quota) = self else {
+                return L("No Claude reading yet — switch the status-line bridge on in Settings.")
+            }
+            let reset = quota.resetsAt.map { " · " + L("Resets \(RelativeTime.until($0, from: now))") } ?? ""
+            return summary() + reset
+        }
+    }
+
+    let quotas: [AgentQuota]
+    let now: Date
+    @Binding var hovered: Item?
+    let onSelect: (Item) -> Void
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ForEach(items) { item in
+                ring(item)
+            }
+        }
+        // The cluster empties itself when the cursor leaves it entirely — an individual ring's
+        // `onHover(false)` can arrive after the next ring's `onHover(true)` while sliding across,
+        // which would blank the dateline mid-read.
+        .onHover { if !$0 { hovered = nil } }
+    }
+
+    /// Claude's two windows first, then Codex's one: the five-hour window is the one that stops
+    /// you in the next hour, and it's the reason to look at all.
+    private var items: [Item] {
+        var items = quotas.map(Item.quota)
+        if !quotas.contains(where: { $0.agent == .claude }) { items.insert(.setup, at: 0) }
+        return items
+    }
+
+    private func ring(_ item: Item) -> some View {
+        let quota: AgentQuota? = if case .quota(let quota) = item { quota } else { nil }
+        return AllowanceRing(
+            remaining: quota?.remainingPercent,
+            isLow: quota?.isLow ?? false,
+            highlighted: hovered == item
+        )
+        // The hit target is this fixed 22pt box, not the ring drawn inside it. `AllowanceRing`
+        // grows a little when highlighted, and hit-testing a shape that changes size with the
+        // hover state is how you get a control that flickers on its own edge. It also makes an
+        // 18pt target easier to land on.
+        .frame(width: 22, height: 22)
+        .contentShape(.rect)
+        .onHover { inside in
+            // Assign only on a real change: an unchanged `@State` write still invalidates.
+            if inside {
+                if hovered != item { hovered = item }
+            } else if hovered == item {
+                hovered = nil
+            }
+        }
+        .onTapGesture { onSelect(item) }
+        .help(item.detail(now: now))
     }
 }
 

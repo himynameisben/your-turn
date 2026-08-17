@@ -90,7 +90,7 @@
 "%lld project starred" = "已標星 %lld 個專案";
 "%lld projects starred" = "已標星 %lld 個專案";
 "About" = "關於";
-"Reads session records from ~/.claude — read-only, never written to." = "讀取 ~/.claude 的 session 紀錄，對它只讀不寫。";
+"Reads session records from ~/.claude — read-only, apart from the status-line bridge you switch on yourself." = "讀取 ~/.claude 的 session 紀錄，只讀不寫；唯一的例外是你自己打開的 status-line bridge。";
 
 /* MARK: - Update notice */
 "Update" = "更新";
@@ -188,8 +188,8 @@
 "Totals" = "合計";
 
 /* Codex 額度（用量分頁） */
-"Codex allowance" = "Codex 額度";
-"of your %@ allowance" = "已用掉 %@額度";
+"Allowance" = "額度";
+"%@ left" = "剩 %@";
 "Resets %@" = "%@重置";
 "measured %@" = "%@測得";
 
@@ -199,3 +199,19 @@
 "in %lldm" = "%lld 分鐘後";
 "in %lldh" = "%lld 小時後";
 "in %lldd" = "%lld 天後";
+
+/* Status-line bridge (Settings) */
+"Claude allowance" = "Claude 額度";
+"Your 5-hour and weekly limits, read from Claude Code's status line — the only place it publishes them. Switching this on writes one key (statusLine) into ~/.claude/settings.json, and that is the only thing Your Turn ever writes there." = "你的 5 小時與每週額度，來自 Claude Code 的 status line —— 它只在那裡公開這個數字。打開這個開關會在 ~/.claude/settings.json 寫入一個 key（statusLine），那也是 Your Turn 在那裡唯一會寫的東西。";
+"You already have a status line. Switching this on keeps it: Your Turn's bridge runs first and hands it the same input untouched." = "你已經有 status line 了。打開這個開關不會蓋掉它：Your Turn 的 bridge 會先跑，再把同樣的輸入原封交給它。";
+"Claude Code's status line now shows what's left, and Your Turn reads it from there." = "Claude Code 的 status line 現在會顯示剩餘額度，Your Turn 從那裡讀。";
+"Chained to the status line you already had, which still runs and still prints its own line." = "串接在你原本的 status line 前面，它照常執行、照常印出自己那一行。";
+"The numbers arrive after Claude Code's next reply." = "數字會在 Claude Code 下一次回覆之後出現。";
+
+/* Allowance rings (masthead) */
+"Claude allowance — not set up" = "Claude 額度 — 尚未啟用";
+"No Claude reading yet — switch the status-line bridge on in Settings." = "尚未讀到 Claude 額度 —— 到設定頁打開 status-line bridge。";
+
+/* Allowance reset, as a wall clock (Usage tab) */
+"Resets at %@" = "%@ 重置";
+"Resets %@ at %@" = "%@ %@ 重置";

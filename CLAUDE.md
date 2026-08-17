@@ -6,7 +6,8 @@ stop, and what's next?**
 
 Core premise: both agents already write the answers into `~/.claude` and `~/.codex`. This
 app is a **reader** — it runs no LLM, doesn't parse conversation content, and treats both
-directories as **read-only** (preferences like stars/archive live in UserDefaults).
+directories as **read-only** — with one opt-in exception, the status-line bridge (see below).
+Preferences like stars/archive live in UserDefaults.
 
 - Swift 6 / SwiftUI / macOS 15+, no third-party packages
 - `LSUIElement`: no Dock icon, no Cmd-Tab entry
@@ -35,13 +36,15 @@ that directory is wiped.
 | `--dump` | Print every session: state, times, your last prompt / Claude's next step, jump target, stats |
 | `--triage` | Cross-check how far "terminal still open" and "has pending work" diverge |
 | `--next` | Quality stats for next-step extraction (pending / clear / unknown ratio) |
-| `--cost [--no-cache] [--refresh-prices]` | Print the usage pipeline: scan timings, dedup counts, total spend, per model / per project / per day, rhythm. `--no-cache` forces a cold scan so both paths can be compared; `--refresh-prices` fires the LiteLLM download the window otherwise only attempts once a day |
+| `--cost [--no-cache] [--refresh-prices]` | Print the usage pipeline: scan timings, dedup counts, total spend, per model / per project / per day, rhythm, and both agents' remaining allowance. `--no-cache` forces a cold scan so both paths can be compared; `--refresh-prices` fires the LiteLLM download the window otherwise only attempts once a day |
+| `--status-line [on\|off]` | Read or flip the Claude status-line bridge. The only thing in the app that edits a file it doesn't own, so what needs checking isn't "does it install" but "does switching it off put back exactly what was there" — `cp ~/.claude/settings.json /tmp/before && --status-line on && --status-line off && cmp` is the test, and it passes byte-for-byte. Also prints the last reading |
 | `--login-item [on\|off]` | Read or flip the "start at login" registration. Only meaningful from the binary **inside** the .app (`/Applications/YourTurn.app/Contents/MacOS/YourTurn`) — `SMAppService` answers for the bundle it runs in, and there's no other way to check: these registrations don't show up in AppleScript's login-item list, and the system's database needs root |
 | `--update-check` | Print the running version, GitHub's latest release, the verdict, and the version-ordering table (including the two pairs a string comparison gets wrong). Always fetches, ignoring the daily throttle. Also prints what the **app** last stored and how that resolves — the only way to see whether the launch-time check fired, since a machine that's up to date has no UI at all. Seed `updateCheckLatestVersion` / `updateCheckLatestPage` in UserDefaults to exercise the notice without publishing a release |
-| `--render <dir> [--demo]` | Offscreen-render the main window in every palette — all four tabs via `MainWindowPage` with the mode pinned, so each PNG is literally the page a user sees — plus `light-narrow.png` (the 720pt minimum width), the update sheet, and the menu bar panel's footer. `--demo` renders invented sessions and invented usage instead of the real scan — **required for anything published**, since a real scan puts your own titles, prompts, summaries and actual spend in the picture |
+| `--render <dir> [--demo]` | Offscreen-render the main window in every palette — all four tabs via `MainWindowPage` with the mode pinned, so each PNG is literally the page a user sees — plus `light-narrow.png` (the 720pt minimum width), `light-allowance-setup.png` (the masthead before the status-line bridge is switched on), `light-allowance-hover.png` (the kicker resting and hovered, stacked, to prove the rings don't move), `light-usage-narrow.png` (the Usage tab at 720pt, where the allowance row is tightest), the update sheet, and the menu bar panel's footer. `--demo` renders invented sessions and invented usage instead of the real scan — **required for anything published**, since a real scan puts your own titles, prompts, summaries and actual spend in the picture |
 
 **Session-layer changes: run `--dump`. Usage-layer changes: run `--cost`. Update-layer
-changes: run `--update-check`. Layout changes: run `--render`.** Layout cannot
+changes: run `--update-check`. Status-line-bridge changes: run `--status-line`, and check the
+`settings.json` round trip with `cmp`. Layout changes: run `--render`.** Layout cannot
 be eyeballed — `--render` is the only way to actually see the result
 (`LSUIElement` windows can't be captured reliably with `screencapture`).
 
@@ -68,7 +71,8 @@ Sources/YourTurn/
 │   ├── SummaryText.swift       extracts the "next step" sentence from away_summary
 │   ├── AppPreferences.swift    terminal / editor / appearance / language preferences
 │   ├── LaunchAtLogin.swift     start-at-login, via SMAppService — state lives in macOS, not UserDefaults
-│   └── UpdateCheck.swift       is a newer release out? GitHub releases API, daily, never installs anything
+│   ├── UpdateCheck.swift       is a newer release out? GitHub releases API, daily, never installs anything
+│   └── StatusLineBridge.swift  installs/removes the Claude status-line hook — the one write into ~/.claude
 ├── Stats/                      the second pipeline: what it cost, how the days went
 │   ├── UsageScanner.swift      full-file scan incl. subagents/, byte prefilter + concurrentPerform
 │   ├── UsageRecord.swift       one deduplicated request, split into per-model segments
@@ -78,7 +82,7 @@ Sources/YourTurn/
 │   ├── ProjectRoot.swift       rolls a cwd up to its git repository
 │   ├── UsageStats.swift        aggregation: by day / model / project, plus rhythm
 │   ├── StatsFormat.swift       $ / token / duration formatting, shared with the CLI
-│   ├── CodexQuota.swift        Codex's allowance %, deliberately not dollars
+│   ├── AgentQuota.swift        both agents' remaining allowance %, deliberately not dollars
 │   ├── StatsStore.swift        @Observable, scans when the usage window opens
 │   └── CostCommand.swift       --cost
 ├── Actions/
@@ -97,6 +101,7 @@ Sources/YourTurn/
 │   └── RenderCommand.swift     implementation of --render, plus the --demo fake sessions
 └── Resources/
     ├── prices.json             trimmed LiteLLM snapshot (26 Anthropic models, 4.3KB)
+    ├── statusline-bridge.sh    keeps `rate_limits` off Claude Code's status line, chains the old one
     ├── en.lproj/               Localizable.strings (source language) + InfoPlist.strings
     └── zh-Hant.lproj/          the same two files, translated
 
@@ -111,6 +116,7 @@ docs/RELEASING.md               signing & notarization playbook
 | `sessions/<pid>.json` | **live registry**: `pid` ↔ `sessionId`, plus Claude's self-reported `status` (busy/idle/waiting) and `waitingFor` |
 | `ide/<port>.lock` | SSE port → the editor's workspace path. Written by the Claude Code editor extension, so it's the same shape for VS Code, its forks and JetBrains. It also carries `ideName` (`vscode.env.appName`), which goes **unread** — `__CFBundleIdentifier` answers "which app" exactly, and for hosts that ship no extension at all |
 | `projects/<slug>/<uuid>/subagents/agent-*.jsonl` | **usage only**: subagent transcripts. Invisible to the session scanner by design, mandatory for the cost scanner |
+| *(no file)* `rate_limits` on the status line | **allowance only**: `five_hour` / `seven_day`, each with `used_percentage` and a `resets_at` epoch. The one place Claude Code publishes a subscription's limits — searched `projects/*.jsonl` plus `cache/`, `telemetry/`, `daemon/`, `jobs/` and `session-env/`, and **nothing on disk carries them**. Only reachable by installing a status line, which is what `StatusLineBridge` does |
 
 Codex, under `~/.codex`:
 
@@ -198,6 +204,16 @@ scanners agree on nothing above that line, and each disagreement is measured.
   disk at all** (only `turn_aborted`, 81 times). So a Codex row can say "idle, your move" but
   never "blocked on a dialog", and the amber chip simply never appears on one.
 - **tmux is the one host given up on** — see below; unchanged by any of this.
+- **The state database is opened read-only, then again with `immutable=1`** — `state_5.sqlite`
+  is a WAL database, a WAL reader needs the `-shm` shared-memory file, and a
+  `SQLITE_OPEN_READONLY` connection will not create one. Measured: **49 threads while Codex is
+  running and holding `-shm` open, 0 the moment it exits** — so the entire Codex half of the app
+  disappeared for anyone whose Codex wasn't running, reported through the same quiet
+  "no Codex sessions" path a schema change takes. `immutable=1` skips the WAL, which is unsafe
+  against a concurrent writer and safe here for the reason that triggers it: the fallback is only
+  reached because the ordinary open failed, and it only fails when nothing holds the database
+  open. `sqlite3_open_v2` also succeeds without touching the file, so the connection is probed
+  with a real `SELECT` before it's trusted.
 
 - **No dollars for Codex** — `total_token_usage` is a **running total for the whole thread**,
   re-emitted every turn, so the `requestId` dedup the Claude pipeline is built on has nothing
@@ -205,7 +221,9 @@ scanners agree on nothing above that line, and each disagreement is measured.
   also a subscription, so a token-derived figure would describe a bill nobody receives. What
   Codex does report is the allowance — measured `used_percent` 46.0 over a `window_minutes` of
   10080 with a `resets_at` — and that's the entire model: one number, one clock, drawn as a bar
-  because it's the only quantity on that page with a ceiling.
+  because it's the only quantity on that page with a ceiling. Measured `secondary` null in **all
+  5403** records, and `codex app-server` reports one bucket: Codex has a single window where
+  Claude has two.
 - **The agent badge only appears when both agents are present** — `SessionStore.showsAgentBadges`.
   A Claude-only user sees the list exactly as before; stamping the same word down every row of a
   single-agent column is noise carrying no information.
@@ -374,6 +392,106 @@ restricted to Claude models: **$6,193 vs $6,176 — 0.27%**, and per model +0.0%
   badge degraded through "Up…" to a bare arrow. Both carry `.fixedSize()`. The headline is the
   only thing in that row that may give, and it does — four lines at 720pt, two at the 860pt
   default. `--render` emits `light-narrow.png` at exactly 720 so that stays visible.
+
+### The allowance rows
+
+Two agents, three windows, and the only numbers on the Usage tab that aren't money.
+
+- **The status line is the only route that doesn't touch a credential** — the account API
+  (`/api/oauth/usage`) answers properly, cross-checked at 43% / 82% against the status line's
+  44% / 82% with matching reset stamps, but reading it means lifting an OAuth token out of the
+  login keychain, and measured, a second app reading `Claude Code-credentials` raises a macOS
+  consent dialog. A menu bar app that asks for your credentials on first launch has to be
+  trusted on its word; one that asks you to switch on a status line does not.
+- **So the app writes to `~/.claude` exactly once, from a switch that says so** — `statusLine`,
+  one key, off by default, reversible from the same switch. That's a real change to the app's
+  premise and the About row's wording was changed to match rather than left quietly wrong.
+- **Switching off restores the file byte-for-byte** — the key is added by splicing one line into
+  the existing text, not by reserializing: measured, a full `JSONSerialization` rewrite of a
+  4.8KB `settings.json` changes every byte of it, because there's no insertion order to preserve
+  and `.sortedKeys` is the only deterministic option. The splice is parsed back and compared to
+  the intended object before it's written, so anything unexpected (a hand-formatted multi-line
+  `statusLine`) falls back to the safe reserialize instead of guessing.
+- **An existing status line is chained, never replaced, and the chain is stored in the command
+  string** — `'<script>' '<their command>'`, which switching off reads back. Same reasoning as
+  `LaunchAtLogin`: state kept on our side can disagree with the file, and here disagreeing would
+  silently eat somebody's status line.
+- **The bridge is a shell script, and it always prints something** — the app binary was the
+  obvious alternative and it measured **0.93–1.13s just to start**, against a status line that
+  reruns on a 300ms debounce. `plutil` is on every macOS, parses JSON properly, and lifts the
+  whole `rate_limits` subtree in **10.7ms**; jq isn't guaranteed and `/usr/bin/python3` can
+  trigger the Command Line Tools installer. It prints a line because configuring *any* status
+  line makes Claude Code drop its footer hints (`esc to interrupt`, `? for shortcuts`, the voice
+  hint) — printing nothing would trade those away for nothing. One trap: measured,
+  `plutil -extract … raw` writes its "no value at that key path" error to **stdout**, so a
+  missing key has to be read through the exit status or it lands in the file looking like a value.
+- **The rings live in the masthead, the bars stay on the Usage tab** — "is there room to start
+  something" is a question you have *before* you pick a session, and a number on a tab you have to
+  remember to open is a number you never see. Three bars wide enough to read would cost the
+  headline its line; at 18pt a gauge that isn't full is legible without reading anything at all.
+  So the session list gets rings and the Usage tab keeps the labelled bars — the same fact at two
+  distances, not the same control twice.
+- **The detail is drawn *after* the rings, and nothing before them may change size** — it first
+  replaced the dateline, which sits before the rings in that row. Measured with a real cursor:
+  arriving at a ring made the text longer, that pushed the rings right, out from under the cursor,
+  which ended the hover, which shortened the text and slid them back under it. A layout feedback
+  loop at refresh rate — and because the hover state lived in `MainWindowPage`, every iteration
+  repainted the masthead, every project block and every session line. It beachballed. So the
+  dateline is `.fixedSize()`, the detail appears to the right of the rings where it can only grow
+  into empty space, and the ring's hit target is a fixed 22pt box rather than the ring drawn inside
+  it — hit-testing a shape that resizes with its own hover state is the same bug one level down.
+  `MastheadKicker` owns the hover state for the same reason: one line of the header should not
+  repaint the page it sits on. A popover was not used either: a floating panel over a window whose
+  whole design is flat.
+- **`--render` emits `light-allowance-hover.png`, resting above and hovered below** — the bug was
+  invisible in every screenshot of the resting state, which is precisely why that frame exists:
+  the rings either line up between the two rows or they don't. Measured on the frame: ring 1 at
+  x 333–373 and ring 3 at x 449–489 in both, ring 2 growing around an unchanged centre.
+- **The allowance rings force the reading off the Usage tab's scan** — that scan is 1.5s cold and
+  deliberately only runs when you open the tab, so `StatsStore.refreshQuotas` is split out and
+  rides the window's 30-second session timer instead. It costs one small file plus a handful of
+  rollout tails, and it takes the Codex sessions straight from the session scan that just ran
+  rather than scanning that index a second time.
+- **The allowance row is drawn outside the Usage tab's loaded branch** — it was inside it, which
+  meant anyone with no usage recorded had no allowance row at all, and clicking a ring landed them
+  on a page that didn't contain the thing they clicked. An allowance isn't a fact about spend and
+  isn't read from the same place, so it doesn't wait on the same scan.
+- **The row scrolls itself into view, rather than the window timing it** — the window can only
+  guess when that row exists, and on a cold open it is a second and a half late; any delay chosen
+  for that is a guess about a machine that isn't this one. `Navigation.pendingScroll` is a request,
+  and the row's own `onAppear` answers it and clears it. Same shape as every other piece of state
+  here: nothing stored that can disagree with where the page actually is.
+- **The empty slot is a dashed ring, not an absent one** — with no Claude reading (bridge off, or
+  on and Claude Code hasn't replied yet) a solid unfilled ring would say you had nothing left,
+  the opposite of the truth. Dashed reads as "nothing here", and clicking it opens the settings
+  row that fills it. Both cases lead to the same place because "you have no Claude number" and
+  "here is how to get one" are one sentence from where the cursor is.
+- **Stated as what's left, not what's gone** — both agents report the opposite (Claude Code's own
+  footer says "You've used 82%"), and this is the one place the app deliberately inverts a source.
+  The question is whether there's room to start something. The bar drains, green until 20% and
+  amber below it — the same amber as the session chips, and the only threshold on the page.
+- **The Usage tab prints a wall clock, the masthead prints a countdown** — the same instant, two
+  registers, because they answer different questions. "in 1d" is what you need before starting
+  something; "Resets Aug 19 at 8:00 AM" is what you need to plan around, and a weekly window that
+  comes back at a fixed hour makes the difference between planning and waiting. Both sources report
+  an absolute instant — a UTC stamp from Claude (`2026-08-19T00:00:00Z`), a Unix stamp from Codex —
+  so formatting puts it in the reader's own zone by construction. Cross-checked against Claude
+  Code's own footer, which says "resets Ag 19 at 8am (Asia/Taipei)" for the same window;
+  `--cost` prints the zone and offset next to it so the conversion can be checked rather than
+  assumed. Date and time are formatted as two fields so English reads "Aug 19 at 8:00 AM" rather
+  than "at Aug 19, 8:00 AM", and via `setLocalizedDateFormatFromTemplate("jm")` rather than a fixed
+  pattern, so a 24-hour locale gets a 24-hour clock.
+- **The allowance bar has a fixed width and the footnote never truncates** — both settled by the
+  720pt frame. Letting the bar absorb the leftover space made each row's track a different length
+  (measured: 50pt apart), and three gauges you can't compare to each other are three gauges doing a
+  third of their job. With the bar fixed, the reset time is what wouldn't fit — so the row is
+  `ViewThatFits`, longest version first: the age (`· measured 3h ago`) drops out whole at 720pt
+  rather than the line ending in "…9:1…". The demo's Codex reading is deliberately stale enough to
+  earn that second half, so the frame actually exercises the long variant.
+- **The reading is an observation with a timestamp, for both agents** — neither is queried live:
+  Codex's comes off the last turn on disk, Claude's off the last status-line render. The age is
+  printed only once it passes an hour, because "measured 2m ago" on every fresh row is noise that
+  trains you to stop reading the one time it says two days.
 
 ### The heatmap and the period filter
 

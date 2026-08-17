@@ -112,6 +112,52 @@ struct AgentBadge: View {
     }
 }
 
+/// How much of an allowance is left, as a ring.
+///
+/// A ring rather than the Usage tab's bar because this one lives in the masthead, where a bar
+/// wide enough to read would cost the headline its line. A ring says the same thing in 18×18pt,
+/// and at a glance a gauge that isn't full is legible without reading anything at all — which is
+/// the only job it has up there. The number itself is one hover away.
+///
+/// `remaining` is nil for the state where there is no reading to draw: a dashed outline, which
+/// reads as "empty slot" rather than "empty tank" — an unfilled solid ring would say you had
+/// nothing left, the opposite of the truth.
+struct AllowanceRing: View {
+    let remaining: Double?
+    let isLow: Bool
+    var highlighted = false
+
+    @Environment(\.theme) private var theme
+
+    private static let size: CGFloat = 18
+    private static let line: CGFloat = 2.5
+
+    var body: some View {
+        ZStack {
+            if let remaining {
+                Circle().stroke(theme.rule, lineWidth: Self.line)
+                Circle()
+                    .trim(from: 0, to: max(0.015, min(remaining / 100, 1)))
+                    .stroke(
+                        isLow ? theme.waitingChip.fg : Theme.dotRunning,
+                        style: StrokeStyle(lineWidth: Self.line, lineCap: .round)
+                    )
+                    // Starts at twelve o'clock and drains clockwise, like every other gauge.
+                    .rotationEffect(.degrees(-90))
+            } else {
+                Circle().stroke(
+                    theme.faint,
+                    style: StrokeStyle(lineWidth: 1, dash: [2, 2.5])
+                )
+            }
+        }
+        .frame(width: Self.size, height: Self.size)
+        .opacity(highlighted ? 1 : 0.82)
+        .scaleEffect(highlighted ? 1.12 : 1)
+        .animation(.snappy(duration: 0.12), value: highlighted)
+    }
+}
+
 /// An `LSUIElement` app's windows open behind other apps by default, and can't be
 /// switched to with Cmd-Tab. While a window is open, temporarily flip the activation
 /// policy to `.regular`, then flip it back to `.accessory` once everything's closed.

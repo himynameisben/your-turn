@@ -93,7 +93,7 @@
 "%lld project starred" = "%lld project starred";
 "%lld projects starred" = "%lld projects starred";
 "About" = "About";
-"Reads session records from ~/.claude — read-only, never written to." = "Reads session records from ~/.claude — read-only, never written to.";
+"Reads session records from ~/.claude — read-only, apart from the status-line bridge you switch on yourself." = "Reads session records from ~/.claude — read-only, apart from the status-line bridge you switch on yourself.";
 
 /* MARK: - Update notice. Every string here only ever appears when there is a newer release —
    there is no "you are up to date" wording anywhere, on purpose. Both routes are offered because
@@ -202,9 +202,9 @@
 "%@ · %@ tokens · %@" = "%@ · %@ tokens · %@";
 "Totals" = "Totals";
 
-/* Codex allowance (Usage tab) */
-"Codex allowance" = "Codex allowance";
-"of your %@ allowance" = "of your %@ allowance";
+/* Allowance (Usage tab) */
+"Allowance" = "Allowance";
+"%@ left" = "%@ left";
 "Resets %@" = "Resets %@";
 "measured %@" = "measured %@";
 
@@ -214,3 +214,19 @@
 "in %lldm" = "in %lldm";
 "in %lldh" = "in %lldh";
 "in %lldd" = "in %lldd";
+
+/* Status-line bridge (Settings) */
+"Claude allowance" = "Claude allowance";
+"Your 5-hour and weekly limits, read from Claude Code's status line — the only place it publishes them. Switching this on writes one key (statusLine) into ~/.claude/settings.json, and that is the only thing Your Turn ever writes there." = "Your 5-hour and weekly limits, read from Claude Code's status line — the only place it publishes them. Switching this on writes one key (statusLine) into ~/.claude/settings.json, and that is the only thing Your Turn ever writes there.";
+"You already have a status line. Switching this on keeps it: Your Turn's bridge runs first and hands it the same input untouched." = "You already have a status line. Switching this on keeps it: Your Turn's bridge runs first and hands it the same input untouched.";
+"Claude Code's status line now shows what's left, and Your Turn reads it from there." = "Claude Code's status line now shows what's left, and Your Turn reads it from there.";
+"Chained to the status line you already had, which still runs and still prints its own line." = "Chained to the status line you already had, which still runs and still prints its own line.";
+"The numbers arrive after Claude Code's next reply." = "The numbers arrive after Claude Code's next reply.";
+
+/* Allowance rings (masthead) */
+"Claude allowance — not set up" = "Claude allowance — not set up";
+"No Claude reading yet — switch the status-line bridge on in Settings." = "No Claude reading yet — switch the status-line bridge on in Settings.";
+
+/* Allowance reset, as a wall clock (Usage tab) */
+"Resets at %@" = "Resets at %@";
+"Resets %@ at %@" = "Resets %@ at %@";

@@ -18,9 +18,10 @@ final class StatsStore {
     private(set) var prices = PriceTable.load()
     private(set) var isScanning = false
     private(set) var lastScan: Date?
-    /// nil for anyone without Codex, which is the only reason the page can decide whether to
-    /// draw that section at all.
-    private(set) var codexQuota: CodexQuota?
+    /// Empty for anyone running neither the status-line bridge nor Codex, which is the only
+    /// reason the page can decide whether to draw that section at all. Claude's two windows
+    /// come first because the five-hour one is the one that stops you today.
+    private(set) var quotas: [AgentQuota] = []
 
     var period = UsagePeriod.all {
         didSet {
@@ -47,16 +48,30 @@ final class StatsStore {
             UsageScanner.scan(cache: cache)
         }.value
         scan = result
-        // Its own index query and a handful of tail reads — it shares nothing with the Claude
-        // scan above, because the two answer different questions off different disks.
-        codexQuota = await Task.detached(priority: .userInitiated) {
-            CodexQuotaReader.read(sessions: CodexScanner.scan())
-        }.value
+        await refreshQuotas(sessions: nil)
         overall = await aggregate(result, prices: prices, range: nil)
         summary = period.mode == .all
             ? overall
             : await aggregate(result, prices: prices, range: period.range())
         lastScan = Date()
+    }
+
+    /// Just the two allowance readings, without the 1.0GB scan behind everything else on the page.
+    ///
+    /// Split out because the allowance has a second audience: the session list's masthead rings,
+    /// which need a number on the window's 30-second timer, while the Usage tab is deliberately
+    /// only scanned when you open it. Neither reader shares anything with `UsageScanner` — Claude's
+    /// allowance is one small file the status-line bridge leaves behind, and Codex's is a handful
+    /// of rollout tails. Different questions, different disks.
+    ///
+    /// `sessions` is the session list's own scan handed straight back, so the common caller pays
+    /// nothing; passing `nil` (the Usage tab, which may be open before any session refresh has
+    /// landed) falls back to scanning Codex's index itself.
+    func refreshQuotas(sessions: [Session]?) async {
+        quotas = await Task.detached(priority: .userInitiated) {
+            ClaudeQuotaReader.read()
+                + CodexQuotaReader.read(sessions: sessions ?? CodexScanner.scan())
+        }.value
     }
 
     /// What the usage tab calls when you switch to it.
@@ -118,6 +133,15 @@ final class StatsStore {
         }.value
     }
 
+    /// `--render` only: the allowance without the rest of the page.
+    ///
+    /// The session-list frames now draw the masthead rings, so they need a reading — but not the
+    /// 1.0GB scan behind everything else a `StatsStore` holds, and under `--demo` not a real one
+    /// either: a published screenshot must not show how much of somebody's actual week is gone.
+    func loadDemoQuotas(_ quotas: [AgentQuota]) {
+        self.quotas = quotas
+    }
+
     /// Demo/preview only (`--render … --demo`). A real scan would put this machine's project
     /// names and actual spend into a published screenshot.
     ///
@@ -125,13 +149,13 @@ final class StatsStore {
     /// the demo through the real pricing, the real aggregation and the real period filter, so
     /// the screenshot stays evidence that those work. Synchronous because `ImageRenderer`
     /// won't wait for a Task — set `period` before calling this, not after.
-    func loadDemo(_ scan: UsageScanner.Result, quota: CodexQuota? = nil) {
+    func loadDemo(_ scan: UsageScanner.Result, quotas: [AgentQuota] = []) {
         self.scan = scan
         overall = UsageStats.build(scan, prices: prices, range: nil)
         summary = period.mode == .all
             ? overall
             : UsageStats.build(scan, prices: prices, range: period.range())
-        codexQuota = quota
+        self.quotas = quotas
         lastScan = Date()
     }
 }

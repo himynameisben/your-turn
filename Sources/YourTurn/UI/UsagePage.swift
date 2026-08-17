@@ -12,24 +12,44 @@ import SwiftUI
 /// Everything here is plain SwiftUI — no AppKit-backed control needs an offscreen stand-in,
 /// and no `LazyVStack` appears, so `--render` can rasterize the whole page.
 struct UsageSections: View {
+    /// Scroll target for the masthead's allowance rings. A plain string rather than an enum
+    /// because `scrollTo` takes any `Hashable` and one row is not a namespace.
+    static let allowanceAnchor = "allowance"
+
     let store: StatsStore
     let now: Date
+    /// Only for the scroll request a masthead ring leaves behind. Optional because `--render`
+    /// rasterizes this page with no window to navigate.
+    var navigation: Navigation?
 
     @Environment(\.theme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if let summary = store.summary, summary.requests > 0 {
-                sections(summary)
-            } else if store.overall != nil {
-                // The period row stays up even with nothing to show: a filter you can't see
-                // is a filter you can't undo, and stepping into a quiet week is the most
-                // ordinary way to land here.
-                StatsRow(label: L("Period")) { PeriodPicker(store: store, now: now) }
-                divider
-                empty
-            } else {
-                empty
+        // Nested inside the window's scroll view rather than replacing it: a `ScrollViewReader`
+        // drives the nearest enclosing scroll view, so this one can move the whole page from
+        // where the target row actually lives. Under `--render` there is no scroll view at all
+        // and it lays out as a plain container.
+        ScrollViewReader { proxy in
+            VStack(alignment: .leading, spacing: 0) {
+                if let summary = store.summary, summary.requests > 0 {
+                    sections(summary)
+                } else if store.overall != nil {
+                    // The period row stays up even with nothing to show: a filter you can't see
+                    // is a filter you can't undo, and stepping into a quiet week is the most
+                    // ordinary way to land here.
+                    StatsRow(label: L("Period")) { PeriodPicker(store: store, now: now) }
+                    divider
+                    empty
+                } else {
+                    empty
+                }
+
+                allowance(proxy)
+
+                if let summary = store.summary, summary.requests > 0 {
+                    divider
+                    StatsRow(label: nil) { Provenance(store: store, summary: summary) }
+                }
             }
         }
     }
@@ -82,16 +102,33 @@ struct UsageSections: View {
         StatsRow(label: L("Where it goes")) { CostBreakdown(summary: summary) }
         divider
         StatsRow(label: L("Rhythm")) { RhythmBlock(rhythm: summary.rhythm) }
-        // Last of the data rows, and only for people who run Codex. It sits apart from
-        // everything above because it is a different kind of fact: every other row on this page
-        // is money reconstructed from tokens, and this one is an allowance on a clock. Putting
-        // a percentage inside the cost breakdown would invite reading it as a share of spend.
-        if let quota = store.codexQuota {
+    }
+
+    /// Outside `sections` on purpose: an allowance is not a fact about your spend, and it is read
+    /// from somewhere else entirely. Drawn inside the loaded branch it would vanish for anyone
+    /// with no usage recorded — including anyone who got here by clicking a masthead ring, who
+    /// would land on a page that doesn't contain the thing they clicked.
+    @ViewBuilder
+    private func allowance(_ proxy: ScrollViewProxy) -> some View {
+        if !store.quotas.isEmpty {
             divider
-            StatsRow(label: L("Codex allowance")) { CodexQuotaBlock(quota: quota, now: now) }
+            StatsRow(label: L("Allowance")) { AllowanceBlock(quotas: store.quotas, now: now) }
+                // What the masthead's rings scroll to. Anchored on the row rather than the block
+                // so the gutter label lands in view with it — arriving at three bars with no
+                // heading beside them reads as having landed in the wrong place.
+                .id(Self.allowanceAnchor)
+                // Scrolled from here rather than from the window, because the window can only
+                // guess at when this row exists: the page scans on arrival, so on a cold open it
+                // is a second and a half late, and any delay picked for that is a guess about a
+                // machine that isn't this one. `onAppear` is the row saying so itself.
+                .onAppear {
+                    guard navigation?.pendingScroll == Self.allowanceAnchor else { return }
+                    navigation?.pendingScroll = nil
+                    withAnimation(.easeOut(duration: 0.28)) {
+                        proxy.scrollTo(Self.allowanceAnchor, anchor: .center)
+                    }
+                }
         }
-        divider
-        StatsRow(label: nil) { Provenance(store: store, summary: summary) }
     }
 
     private var divider: some View {
@@ -172,6 +209,9 @@ private struct StatsRow<Content: View>: View {
 private struct PeriodPicker: View {
     let store: StatsStore
     let now: Date
+    /// Only for the scroll request a masthead ring leaves behind. Optional because `--render`
+    /// rasterizes this page with no window to navigate.
+    var navigation: Navigation?
 
     @Environment(\.theme) private var theme
 
@@ -229,54 +269,99 @@ private struct PeriodPicker: View {
 /// question is "how am I doing right now" (today / this week / this month), but once you've
 /// picked March the answer to "this month" is irrelevant — what you want is the shape of
 /// March itself.
-/// Codex's allowance: one number and one clock.
+/// Every allowance on one spine: up to two Claude windows and one Codex window.
 ///
-/// A bar rather than another `Theme.display` figure, because it is the one quantity on this
-/// page with a ceiling — every dollar total above it can always go up, and a percentage cannot.
-/// Drawing it in the same typeface as spend would say they're the same kind of number.
-private struct CodexQuotaBlock: View {
-    let quota: CodexQuota
+/// Bars rather than `Theme.display` figures, because these are the only quantities on the page
+/// with a ceiling — every dollar total above can always go up, and a percentage cannot. Drawing
+/// them in the same typeface as spend would say they were the same kind of number. And a table
+/// rather than one big number apiece: three stacked hero figures would be three answers to a
+/// question nobody asked in triplicate.
+private struct AllowanceBlock: View {
+    let quotas: [AgentQuota]
+    let now: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            ForEach(quotas) { AllowanceBar(quota: $0, now: now) }
+        }
+    }
+}
+
+private struct AllowanceBar: View {
+    let quota: AgentQuota
     let now: Date
 
     @Environment(\.theme) private var theme
 
-    private var fraction: Double { min(max(quota.usedPercent / 100, 0), 1) }
+    private var fraction: Double { quota.remainingPercent / 100 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(StatsFormat.percentUsed(quota.usedPercent))
-                    .font(Theme.display)
-                    .foregroundStyle(theme.text)
-                Text(L("of your \(quota.windowLabel) allowance"))
-                    .font(Theme.meta)
-                    .foregroundStyle(theme.muted)
-            }
+        HStack(spacing: 10) {
+            // Product name plus window, never translated on the agent half — "Claude · 7-day".
+            Text("\(quota.agent.label) · \(quota.windowLabel)")
+                .font(Theme.meta)
+                .foregroundStyle(theme.muted)
+                .lineLimit(1)
+                .frame(width: 104, alignment: .leading)
+
+            // The bar drains rather than fills. Both agents report what's been *used*, and this
+            // is the one place the app deliberately says it the other way round — the fuel-gauge
+            // reading is the one you can act on.
+            //
+            // A fixed width, not a flexible one. Letting it absorb the leftover space made every
+            // row's track a different length — measured at 720pt, one row's track ran 50pt longer
+            // than the next — and three gauges you can't compare to each other are three gauges
+            // doing a third of their job.
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(theme.rule)
                     Capsule()
-                        .fill(theme.waitingChip.fg)
+                        .fill(quota.isLow ? theme.waitingChip.fg : Theme.dotRunning)
                         .frame(width: max(2, geo.size.width * fraction))
                 }
             }
-            .frame(height: 6)
-            .frame(maxWidth: 320)
-            Text(footnote)
+            .frame(width: 116, height: 6)
+
+            Text(L("\(StatsFormat.percentUsed(quota.remainingPercent)) left"))
                 .font(Theme.meta)
-                .foregroundStyle(theme.faint)
+                .foregroundStyle(theme.text)
+                .lineLimit(1)
+                .frame(width: 68, alignment: .leading)
+
+            footnote
+
+            Spacer(minLength: 0)
         }
     }
 
-    /// Says when it was measured as well as when it resets. The reading is lifted from the last
-    /// turn of your most recent thread, so a week away from Codex leaves a week-old number —
-    /// and a stale percentage presented as current is the one way this row could mislead.
-    private var footnote: String {
-        let reset = quota.resetsAt.map {
-            L("Resets \(RelativeTime.until($0, from: now))")
+    /// Nothing here truncates. Everything to the left is fixed, so the space left for this is
+    /// known — and at the window's 720pt minimum it fits the reset time and not much else. So the
+    /// age drops out whole rather than the line ending in "…9:1…": `ViewThatFits` picks the
+    /// longest version that still fits, and the reset time is the part that always survives.
+    @ViewBuilder
+    private var footnote: some View {
+        let reset = quota.resetsText(now: now)
+        ViewThatFits(in: .horizontal) {
+            ForEach([[reset, measured], [reset]], id: \.self) { parts in
+                Text(parts.compactMap { $0 }.joined(separator: " · "))
+                    .font(Theme.meta)
+                    .foregroundStyle(theme.faint)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
         }
-        let measured = L("measured \(RelativeTime.format(quota.observedAt, from: now))")
-        return [reset, measured].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// When it resets, plus when it was *measured* — but the second half only once the reading
+    /// has some age on it. Neither agent is queried live: Codex's comes off the last turn on
+    /// disk and Claude's off the last status-line render, so stepping away from an agent leaves
+    /// its number frozen. A stale percentage presented as current is the one way this row could
+    /// mislead, and an "measured 2m ago" on every fresh reading is noise that trains you to stop
+    /// reading it. One hour is the line: shorter than any of these windows, longer than a break.
+    private var measured: String? {
+        now.timeIntervalSince(quota.observedAt) > 3600
+            ? L("measured \(RelativeTime.format(quota.observedAt, from: now))")
+            : nil
     }
 }
 
@@ -376,6 +461,9 @@ private struct Heatmap: View {
     let summary: UsageStats.Summary
     let store: StatsStore
     let now: Date
+    /// Only for the scroll request a masthead ring leaves behind. Optional because `--render`
+    /// rasterizes this page with no window to navigate.
+    var navigation: Navigation?
 
     @Environment(\.theme) private var theme
 

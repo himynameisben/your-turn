@@ -39,6 +39,15 @@ struct YourTurnApp: App {
             MainActor.assumeIsolated { LaunchAtLogin.cli(next) }
             exit(0)
         }
+        // Status-line bridge verification entry point. The only setting in the app that edits
+        // somebody else's file, so it needs a way to be switched on and off — and its round trip
+        // checked — without going through the UI.
+        if let index = CommandLine.arguments.firstIndex(of: "--status-line") {
+            let next = CommandLine.arguments.count > index + 1
+                ? CommandLine.arguments[index + 1] : nil
+            StatusLineBridge.cli(next)
+            exit(0)
+        }
         // Layout verification entry point: offscreen-renders the main window PNG for each palette.
         if let index = CommandLine.arguments.firstIndex(of: "--render") {
             // The argument after --render is the directory unless it's the next flag, so
