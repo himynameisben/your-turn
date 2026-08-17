@@ -4,11 +4,16 @@ struct ResolvedSession: Identifiable, Sendable {
     let session: Session
     let state: SessionState
     /// The live process this session matched to; nil means the session's terminal has closed.
-    let process: ClaudeProcess?
-    /// The status Claude itself reported (from `~/.claude/sessions/<pid>.json`).
-    /// nil means this session isn't registered, and the state is inferred from the tail
-    /// record and the process instead.
+    let process: AgentProcess?
+    /// The status the agent reported about itself (from `~/.claude/sessions/<pid>.json`).
+    /// nil means this session isn't registered — or is a Codex thread, which never reports one
+    /// — and the state is inferred from the tail record and the process instead.
     let live: LiveStatus?
+    /// Whether the process was bound to this session exactly — a registry entry for Claude, a
+    /// held writer lock for Codex — rather than by the top-N guess. Tracked separately from
+    /// `live` because Codex is always exact and yet never reports a status, so a `--dump` that
+    /// keyed "exact" off `live` would report every Codex row as a guess.
+    let exactMatch: Bool
     var id: String { session.id }
 
     var isLive: Bool { process != nil }
@@ -74,7 +79,7 @@ struct ProjectGroup: Identifiable, Sendable {
 enum SessionResolver {
     static func resolve(
         _ sessions: [Session],
-        processes: [ClaudeProcess],
+        processes: [AgentProcess],
         registry: [RegisteredSession] = [],
         now: Date = Date()
     ) -> [ProjectGroup] {
@@ -94,17 +99,27 @@ enum SessionResolver {
                     if let entry = bySessionID[session.id], let process = byPID[entry.pid] {
                         return ResolvedSession(
                             session: session,
-                            state: state(for: entry.status),
+                            // A Codex binding carries no status — the lock proves the thread is
+                            // open, and the tail says whether the turn is still running.
+                            state: entry.status.map(state(for:))
+                                ?? session.state(hasLiveProcess: true, now: now),
                             process: process,
-                            live: entry.status
+                            live: entry.status,
+                            exactMatch: true
                         )
                     }
-                    let process = spare.isEmpty ? nil : spare.removeFirst()
+                    // The guess never crosses agents. Measured why: a lock-less `codex`
+                    // app-server sits in a real project cwd, so a folder holding one Claude
+                    // session and one idle Codex server would otherwise report the Claude
+                    // session as live off the back of the wrong process.
+                    let index = spare.firstIndex { $0.agent == session.agent }
+                    let process = index.map { spare.remove(at: $0) }
                     return ResolvedSession(
                         session: session,
                         state: session.state(hasLiveProcess: process != nil, now: now),
                         process: process,
-                        live: nil
+                        live: nil,
+                        exactMatch: false
                     )
                 }
                 return ProjectGroup(path: path, sessions: resolved)

@@ -22,12 +22,16 @@ enum LiveStatus: Sendable, Equatable {
     }
 }
 
-/// One entry in `~/.claude/sessions/<pid>.json`.
+/// An exact pid ↔ session binding: one entry in `~/.claude/sessions/<pid>.json`, or one held
+/// `~/.codex/thread-writer-locks/<thread-id>.lock`.
 struct RegisteredSession: Sendable {
     let pid: Int32
     let sessionId: String
     let cwd: String
-    let status: LiveStatus
+    /// What the agent says about itself, when it says anything. `nil` for Codex, which reports
+    /// no status anywhere — those fall back to inferring state from the rollout tail and the
+    /// clock, which is the same route an unregistered Claude session takes.
+    let status: LiveStatus?
 }
 
 /// Reads Claude Code's live session registry.

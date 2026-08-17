@@ -36,6 +36,13 @@ enum StatsFormat {
         whole > 0 ? String(format: "%.0f%%", Double(part) * 100 / Double(whole)) : "—"
     }
 
+    /// An already-computed percentage, kept to one decimal below 10% — Codex reports
+    /// `used_percent` as a fraction of an allowance, and rounding 0.4% to "0%" would read as
+    /// "nothing used" on the day you started.
+    static func percentUsed(_ value: Double) -> String {
+        String(format: value < 10 ? "%.1f%%" : "%.0f%%", value)
+    }
+
     static func bytes(_ count: Int) -> String {
         count >= 1 << 30
             ? String(format: "%.1fGB", Double(count) / Double(1 << 30))

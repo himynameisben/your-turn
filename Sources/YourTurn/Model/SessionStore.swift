@@ -67,6 +67,20 @@ final class SessionStore {
     var awaitingCount: Int { active.count { $0.state == .awaiting } }
     var runningCount: Int { active.count { $0.state == .running } }
 
+    /// Whether the agent badge is worth drawing at all. Someone who only runs Claude Code —
+    /// which is everyone until they install Codex — sees exactly the list they saw before,
+    /// with no per-row label repeating the same word down the whole column.
+    var showsAgentBadges: Bool {
+        var seen: Set<Agent> = []
+        for group in groups {
+            for item in group.sessions {
+                seen.insert(item.session.agent)
+                if seen.count > 1 { return true }
+            }
+        }
+        return false
+    }
+
     /// The number on the menu bar icon. Counts only "waiting for you" — running sessions
     /// don't need you to step in.
     var badgeCount: Int { awaitingCount }
@@ -125,10 +139,7 @@ final class SessionStore {
         // Scanning is synchronous file I/O (measured ~40ms); offload to background so it
         // doesn't stall the menu's open animation.
         groups = await Task.detached(priority: .utility) {
-            let sessions = SessionScanner.scan()
-            let processes = ProcessProbe.liveProcesses()
-            let registry = SessionRegistry.read(livePIDs: Set(processes.map(\.pid)))
-            return SessionResolver.resolve(sessions, processes: processes, registry: registry)
+            SessionInventory.groups().groups
         }.value
         lastRefresh = Date()
     }
