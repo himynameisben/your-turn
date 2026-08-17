@@ -196,16 +196,18 @@ enum DumpCommand {
             return "open new window · claude --resume \(item.session.id.prefix(8))"
         }
         switch process.host {
-        case .vscode(let port):
-            let workspace = port.flatMap(IDELockReader.workspace)
-            return "focus VS Code window · \(workspace ?? item.session.projectPath)"
-                + (port.map { "  (port \($0))" } ?? "")
         case .iterm:
             return "focus iTerm2 tab · \(process.tty ?? "?")"
         case .appleTerminal:
             return "focus Terminal tab · \(process.tty ?? "?")"
+        case .app(let bundleID, let name, let port):
+            let workspace = port.flatMap(IDELockReader.workspace)
+            return "focus \(name) window · \(workspace ?? item.session.projectPath)"
+                + (port.map { "  (ide port \($0))" } ?? "")
+                + (process.tty == nil ? "  (no tty — ACP?)" : "")
+                + "  [\(bundleID)]"
         case .other(let name):
-            return "open project folder (unknown terminal \(name ?? "?"))"
+            return "open project folder (no bundle id, host \(name ?? "?"))"
         }
     }
 

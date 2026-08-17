@@ -55,7 +55,7 @@ Sources/YourTurn/
 │   ├── SessionScanner.swift    scans ~/.claude/projects, parses into [Session] concurrently
 │   ├── JSONLTailReader.swift   reads only the last 64KB of a file: title / summary / times
 │   ├── SessionRegistry.swift   reads ~/.claude/sessions/<pid>.json (pid ↔ sessionId)
-│   └── ProcessProbe.swift      pgrep/lsof/ps to find live claude processes and their terminals
+│   └── ProcessProbe.swift      pgrep/lsof/ps to find live claude processes and the app hosting each
 ├── Model/                      judgment and state
 │   ├── Session.swift           a single session and its state (running/awaiting/finished)
 │   ├── SessionResolver.swift   session × process × registry → ProjectGroup
@@ -103,7 +103,7 @@ docs/RELEASING.md               signing & notarization playbook
 |---|---|
 | `projects/<slug>/<uuid>.jsonl` | the session itself: `ai-title`, `away_summary`, `last-prompt`, `cwd`, `gitBranch`, per-record `timestamp` |
 | `sessions/<pid>.json` | **live registry**: `pid` ↔ `sessionId`, plus Claude's self-reported `status` (busy/idle/waiting) and `waitingFor` |
-| `ide/<port>.lock` | SSE port → VS Code workspace path |
+| `ide/<port>.lock` | SSE port → the editor's workspace path. Written by the Claude Code editor extension, so it's the same shape for VS Code, its forks and JetBrains. It also carries `ideName` (`vscode.env.appName`), which goes **unread** — `__CFBundleIdentifier` answers "which app" exactly, and for hosts that ship no extension at all |
 | `projects/<slug>/<uuid>/subagents/agent-*.jsonl` | **usage only**: subagent transcripts. Invisible to the session scanner by design, mandatory for the cost scanner |
 
 Usage additionally needs `message.usage` (all five token buckets plus `iterations`),
@@ -139,6 +139,26 @@ comments in the corresponding file (they carry the numbers).
   a bug).
 - **Live sessions must not be `--resume`d** — that spawns a second process for the
   same session. If it's alive, switch back to its original terminal window/tab.
+- **Which app to jump to is `__CFBundleIdentifier`, never `TERM_PROGRAM`** — the env var that
+  names the terminal cannot name the app. Cursor, Windsurf and VSCodium all report
+  `TERM_PROGRAM=vscode`, so a jump keyed on that opens Visual Studio Code for someone sitting
+  in Cursor; Zed's **ACP** agents report no `TERM_PROGRAM` at all and have no tty either
+  (measured on a live `codex-acp` tree — Zed's agent panel spawns the adapter directly). What
+  every one of them does carry is `__CFBundleIdentifier`, which launchd stamps on an .app and
+  inherits down — measured present on Zed's terminal, VS Code's terminal and those ACP agents.
+  `TerminalHost` therefore has one `.app(bundleID:name:port:)` case instead of a list of known
+  editors, and `--dump` prints the id it resolved. The one host deliberately **given up on** is
+  tmux: measured (3.5a) every pane reports `TERM_PROGRAM=tmux`, and the bundle id that survives
+  is the *server's* birthplace — start the server from Zed, attach later from iTerm, and the
+  panes still say Zed. Activating the wrong app confidently is worse than the Finder fallback.
+- **Three tiers, by how precisely an app can be aimed at** — AppleScript reaches an individual
+  *tab*, but only iTerm2 and Terminal have a dictionary (Zed ships no `.sdef`, so its terminal
+  tab is simply out of reach). One tier down, `ide/<port>.lock` names the *workspace*, so the
+  right window comes up. Below that, activate the app and hand it the folder. Jumping does the
+  bare activation **and** the folder, both unconditionally: `open`'s exit status can't be used
+  to tell them apart — measured `open -b com.apple.ActivityMonitor <folder>` exiting **0** while
+  Activity Monitor never came to the front, so only an unknown bundle id ever fails. Folder
+  last, so where it works the right window ends up on top.
 - **Start at login keeps no UserDefaults copy** — `SMAppService` owns that state, and the
   user can switch it off in System Settings without the app hearing about it; a cached
   `true` would then contradict macOS. Read `status` every time, and re-read it whenever

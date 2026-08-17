@@ -83,17 +83,9 @@ enum SessionActions {
         focus(process, session: item.session)
     }
 
-    /// Switches focus to the terminal the process is running in.
+    /// Switches focus to the app the process is running in.
     private static func focus(_ process: ClaudeProcess, session: Session) {
         switch process.host {
-        case .vscode(let port):
-            // Must use the workspace from the lock file, not the session's cwd: cwd can be
-            // a subdirectory (observed fanproof's session cwd as .../fanproof/apps/liff),
-            // and opening a subdirectory spawns a new window instead of focusing the
-            // existing one.
-            let folder = port.flatMap(IDELockReader.workspace) ?? session.projectPath
-            _ = Shell.run("/usr/bin/open", ["-a", "Visual Studio Code", folder])
-
         case .iterm:
             AppleScript.run(itermFocusScript(title: session.title, tty: process.tty))
 
@@ -101,10 +93,37 @@ enum SessionActions {
             guard let tty = process.tty else { return }
             AppleScript.run(terminalFocusScript(tty: tty))
 
+        case .app(let bundleID, _, let port):
+            // Opened by bundle id, never by name: a name has to be guessed per app, and the id
+            // came straight off the process. Cursor and Windsurf are the reason — both report
+            // `TERM_PROGRAM=vscode`, so anything keyed on that opens Visual Studio Code instead.
+            //
+            // The folder is the lock file's workspace when there is one, not the session's cwd:
+            // cwd can be a subdirectory (observed fanproof's session cwd as
+            // .../fanproof/apps/liff), and handing an editor a subdirectory spawns a new window
+            // instead of focusing the existing one. Without a lock file the cwd is used raw
+            // rather than rolled up to the git root — Zed's terminal opens at the workspace
+            // root, so the two coincide for every session measured here, and rolling up would
+            // break anyone who deliberately opened a subdirectory as the workspace. Same
+            // reasoning that keeps `SessionResolver` on the exact cwd.
+            //
+            // Measured on Zed: `open -b` on a folder it already has open leaves the window
+            // count unchanged (10 → 10) — it focuses that workspace rather than adding one.
+            //
+            // Two calls, both unconditional, activation first. An app that doesn't declare
+            // folder support ignores the second one entirely — and `open` cannot be asked
+            // about it: measured `open -b com.apple.ActivityMonitor <folder>` exiting **0**
+            // while Activity Monitor never came to the front, so branching on the exit status
+            // would only ever catch a bundle id LaunchServices doesn't know. The bare call is
+            // what guarantees a kitty or Alacritty user sees *something* happen; the folder
+            // call goes last so that, where it does work, the right window ends up on top.
+            let folder = port.flatMap(IDELockReader.workspace) ?? session.projectPath
+            _ = Shell.run("/usr/bin/open", ["-b", bundleID])
+            _ = Shell.run("/usr/bin/open", ["-b", bundleID, folder])
+
         case .other:
-            // Unrecognized terminals (Ghostty, Warp, etc.) have no reliable AppleScript way
-            // to locate a window — at least open the project folder instead of failing
-            // silently.
+            // No bundle id to aim at — a tmux pane, or a host LaunchServices doesn't know.
+            // Open the project folder rather than fail silently.
             _ = Shell.run("/usr/bin/open", [session.projectPath])
         }
     }
