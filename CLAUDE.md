@@ -40,7 +40,7 @@ that directory is wiped.
 | `--status-line [on\|off]` | Read or flip the Claude status-line bridge. The only thing in the app that edits a file it doesn't own, so what needs checking isn't "does it install" but "does switching it off put back exactly what was there" — `cp ~/.claude/settings.json /tmp/before && --status-line on && --status-line off && cmp` is the test, and it passes byte-for-byte. Also prints the last reading |
 | `--login-item [on\|off]` | Read or flip the "start at login" registration. Only meaningful from the binary **inside** the .app (`/Applications/YourTurn.app/Contents/MacOS/YourTurn`) — `SMAppService` answers for the bundle it runs in, and there's no other way to check: these registrations don't show up in AppleScript's login-item list, and the system's database needs root |
 | `--update-check` | Print the running version, GitHub's latest release, the verdict, and the version-ordering table (including the two pairs a string comparison gets wrong). Always fetches, ignoring the daily throttle. Also prints what the **app** last stored and how that resolves — the only way to see whether the launch-time check fired, since a machine that's up to date has no UI at all. Seed `updateCheckLatestVersion` / `updateCheckLatestPage` in UserDefaults to exercise the notice without publishing a release |
-| `--render <dir> [--demo]` | Offscreen-render the main window in every palette — all four tabs via `MainWindowPage` with the mode pinned, so each PNG is literally the page a user sees — plus `light-narrow.png` (the 720pt minimum width), the update sheet, and the menu bar panel's footer. `--demo` renders invented sessions and invented usage instead of the real scan — **required for anything published**, since a real scan puts your own titles, prompts, summaries and actual spend in the picture |
+| `--render <dir> [--demo]` | Offscreen-render the main window in every palette — all four tabs via `MainWindowPage` with the mode pinned, so each PNG is literally the page a user sees — plus `light-narrow.png` (the 720pt minimum width), `light-allowance-setup.png` (the masthead before the status-line bridge is switched on), the update sheet, and the menu bar panel's footer. `--demo` renders invented sessions and invented usage instead of the real scan — **required for anything published**, since a real scan puts your own titles, prompts, summaries and actual spend in the picture |
 
 **Session-layer changes: run `--dump`. Usage-layer changes: run `--cost`. Update-layer
 changes: run `--update-check`. Status-line-bridge changes: run `--status-line`, and check the
@@ -425,6 +425,37 @@ Two agents, three windows, and the only numbers on the Usage tab that aren't mon
   hint) — printing nothing would trade those away for nothing. One trap: measured,
   `plutil -extract … raw` writes its "no value at that key path" error to **stdout**, so a
   missing key has to be read through the exit status or it lands in the file looking like a value.
+- **The rings live in the masthead, the bars stay on the Usage tab** — "is there room to start
+  something" is a question you have *before* you pick a session, and a number on a tab you have to
+  remember to open is a number you never see. Three bars wide enough to read would cost the
+  headline its line; at 18pt a gauge that isn't full is legible without reading anything at all.
+  So the session list gets rings and the Usage tab keeps the labelled bars — the same fact at two
+  distances, not the same control twice.
+- **The detail replaces the dateline it sits next to** — same row, same font, so revealing it moves
+  nothing on the page and it appears where the eye already is. It's kept to roughly the length of a
+  date, because the dateline is one line at 720pt and a detail truncating to "Claude · 7-d…" is
+  worse than the date it replaced; the reset time is what gives way, and it survives in the
+  `.help()` tooltip and in full on the page the ring links to. A popover was not used: a floating
+  panel over a window whose whole design is flat.
+- **The allowance rings force the reading off the Usage tab's scan** — that scan is 1.5s cold and
+  deliberately only runs when you open the tab, so `StatsStore.refreshQuotas` is split out and
+  rides the window's 30-second session timer instead. It costs one small file plus a handful of
+  rollout tails, and it takes the Codex sessions straight from the session scan that just ran
+  rather than scanning that index a second time.
+- **The allowance row is drawn outside the Usage tab's loaded branch** — it was inside it, which
+  meant anyone with no usage recorded had no allowance row at all, and clicking a ring landed them
+  on a page that didn't contain the thing they clicked. An allowance isn't a fact about spend and
+  isn't read from the same place, so it doesn't wait on the same scan.
+- **The row scrolls itself into view, rather than the window timing it** — the window can only
+  guess when that row exists, and on a cold open it is a second and a half late; any delay chosen
+  for that is a guess about a machine that isn't this one. `Navigation.pendingScroll` is a request,
+  and the row's own `onAppear` answers it and clears it. Same shape as every other piece of state
+  here: nothing stored that can disagree with where the page actually is.
+- **The empty slot is a dashed ring, not an absent one** — with no Claude reading (bridge off, or
+  on and Claude Code hasn't replied yet) a solid unfilled ring would say you had nothing left,
+  the opposite of the truth. Dashed reads as "nothing here", and clicking it opens the settings
+  row that fills it. Both cases lead to the same place because "you have no Claude number" and
+  "here is how to get one" are one sentence from where the cursor is.
 - **Stated as what's left, not what's gone** — both agents report the opposite (Claude Code's own
   footer says "You've used 82%"), and this is the one place the app deliberately inverts a source.
   The question is whether there's room to start something. The bar drains, green until 20% and

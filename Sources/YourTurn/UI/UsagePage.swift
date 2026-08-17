@@ -12,24 +12,44 @@ import SwiftUI
 /// Everything here is plain SwiftUI — no AppKit-backed control needs an offscreen stand-in,
 /// and no `LazyVStack` appears, so `--render` can rasterize the whole page.
 struct UsageSections: View {
+    /// Scroll target for the masthead's allowance rings. A plain string rather than an enum
+    /// because `scrollTo` takes any `Hashable` and one row is not a namespace.
+    static let allowanceAnchor = "allowance"
+
     let store: StatsStore
     let now: Date
+    /// Only for the scroll request a masthead ring leaves behind. Optional because `--render`
+    /// rasterizes this page with no window to navigate.
+    var navigation: Navigation?
 
     @Environment(\.theme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if let summary = store.summary, summary.requests > 0 {
-                sections(summary)
-            } else if store.overall != nil {
-                // The period row stays up even with nothing to show: a filter you can't see
-                // is a filter you can't undo, and stepping into a quiet week is the most
-                // ordinary way to land here.
-                StatsRow(label: L("Period")) { PeriodPicker(store: store, now: now) }
-                divider
-                empty
-            } else {
-                empty
+        // Nested inside the window's scroll view rather than replacing it: a `ScrollViewReader`
+        // drives the nearest enclosing scroll view, so this one can move the whole page from
+        // where the target row actually lives. Under `--render` there is no scroll view at all
+        // and it lays out as a plain container.
+        ScrollViewReader { proxy in
+            VStack(alignment: .leading, spacing: 0) {
+                if let summary = store.summary, summary.requests > 0 {
+                    sections(summary)
+                } else if store.overall != nil {
+                    // The period row stays up even with nothing to show: a filter you can't see
+                    // is a filter you can't undo, and stepping into a quiet week is the most
+                    // ordinary way to land here.
+                    StatsRow(label: L("Period")) { PeriodPicker(store: store, now: now) }
+                    divider
+                    empty
+                } else {
+                    empty
+                }
+
+                allowance(proxy)
+
+                if let summary = store.summary, summary.requests > 0 {
+                    divider
+                    StatsRow(label: nil) { Provenance(store: store, summary: summary) }
+                }
             }
         }
     }
@@ -82,16 +102,33 @@ struct UsageSections: View {
         StatsRow(label: L("Where it goes")) { CostBreakdown(summary: summary) }
         divider
         StatsRow(label: L("Rhythm")) { RhythmBlock(rhythm: summary.rhythm) }
-        // Last of the data rows, and only for people who have an allowance to show. It sits apart
-        // from everything above because it is a different kind of fact: every other row on this
-        // page is money reconstructed from tokens, and these are allowances on a clock. Putting a
-        // percentage inside the cost breakdown would invite reading it as a share of spend.
+    }
+
+    /// Outside `sections` on purpose: an allowance is not a fact about your spend, and it is read
+    /// from somewhere else entirely. Drawn inside the loaded branch it would vanish for anyone
+    /// with no usage recorded — including anyone who got here by clicking a masthead ring, who
+    /// would land on a page that doesn't contain the thing they clicked.
+    @ViewBuilder
+    private func allowance(_ proxy: ScrollViewProxy) -> some View {
         if !store.quotas.isEmpty {
             divider
             StatsRow(label: L("Allowance")) { AllowanceBlock(quotas: store.quotas, now: now) }
+                // What the masthead's rings scroll to. Anchored on the row rather than the block
+                // so the gutter label lands in view with it — arriving at three bars with no
+                // heading beside them reads as having landed in the wrong place.
+                .id(Self.allowanceAnchor)
+                // Scrolled from here rather than from the window, because the window can only
+                // guess at when this row exists: the page scans on arrival, so on a cold open it
+                // is a second and a half late, and any delay picked for that is a guess about a
+                // machine that isn't this one. `onAppear` is the row saying so itself.
+                .onAppear {
+                    guard navigation?.pendingScroll == Self.allowanceAnchor else { return }
+                    navigation?.pendingScroll = nil
+                    withAnimation(.easeOut(duration: 0.28)) {
+                        proxy.scrollTo(Self.allowanceAnchor, anchor: .center)
+                    }
+                }
         }
-        divider
-        StatsRow(label: nil) { Provenance(store: store, summary: summary) }
     }
 
     private var divider: some View {
@@ -172,6 +209,9 @@ private struct StatsRow<Content: View>: View {
 private struct PeriodPicker: View {
     let store: StatsStore
     let now: Date
+    /// Only for the scroll request a masthead ring leaves behind. Optional because `--render`
+    /// rasterizes this page with no window to navigate.
+    var navigation: Navigation?
 
     @Environment(\.theme) private var theme
 
@@ -405,6 +445,9 @@ private struct Heatmap: View {
     let summary: UsageStats.Summary
     let store: StatsStore
     let now: Date
+    /// Only for the scroll request a masthead ring leaves behind. Optional because `--render`
+    /// rasterizes this page with no window to navigate.
+    var navigation: Navigation?
 
     @Environment(\.theme) private var theme
 

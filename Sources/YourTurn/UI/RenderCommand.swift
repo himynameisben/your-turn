@@ -18,6 +18,10 @@ import SwiftUI
 enum RenderCommand {
     static func run(to directory: String, demo: Bool = false) {
         let store = SessionStore()
+        // The session-list frames draw the masthead's allowance rings, so they need a reading —
+        // and only a reading. Under --demo it's invented, for the same reason the sessions are:
+        // a published screenshot must not say how much of a real week is already spent.
+        let sessionStats = StatsStore()
         let preferences = AppPreferences()
         let updates = UpdateCheck()
         /// A second, deliberately empty one for the pages that get published.
@@ -25,6 +29,7 @@ enum RenderCommand {
 
         if demo {
             store.loadDemo(DemoData.groups(now: Date()))
+            sessionStats.loadDemoQuotas(DemoData.quotas(now: Date()))
             // A real render is quiet here — the copy being rendered is the current one — so the
             // update notice's layout only exists to look at under --demo.
             updates.loadDemo(
@@ -43,6 +48,9 @@ enum RenderCommand {
             while !done {
                 RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
             }
+            sessionStats.loadDemoQuotas(
+                ClaudeQuotaReader.read() + CodexQuotaReader.read(sessions: store.sessions)
+            )
             print("Scanned \(store.groups.count) project(s), \(store.active.count) active session(s)")
         }
 
@@ -59,9 +67,9 @@ enum RenderCommand {
             let palette = appearance.theme(system: .light)
             let view = MainWindowPage(
                 store: store,
-                // The session pages never read it; a blank store keeps the scan out of the
-                // session screenshots entirely.
-                stats: StatsStore(),
+                // Allowance rings only. A full StatsStore here would drag the 1.0GB usage scan
+                // into every session screenshot.
+                stats: sessionStats,
                 preferences: preferences,
                 // Quiet on purpose, even under --demo: these are the shots that get published,
                 // and an "Update" badge in the README implies the app in the picture is stale.
@@ -108,7 +116,7 @@ enum RenderCommand {
         // and the headline is what has to give way, so this is the frame that proves it does.
         let narrow = MainWindowPage(
             store: store,
-            stats: StatsStore(),
+            stats: sessionStats,
             preferences: preferences,
             updates: updates,
             mode: .constant(.byProject),
@@ -122,11 +130,34 @@ enum RenderCommand {
         .background(Theme.paper.bg)
         write(narrow, to: outputDirectory.appendingPathComponent("light-narrow.png"))
 
+        // The masthead before anyone has switched the bridge on — a dashed ring where a reading
+        // would be. Same reasoning as `light-usage-month.png` and the update badge: it's a state
+        // that only exists before a setting is touched, so no screenshot of the default demo
+        // would ever contain it, and it's the first thing a new user actually sees.
+        let unset = StatsStore()
+        unset.loadDemoQuotas(DemoData.quotas(now: Date()).filter { $0.agent != .claude })
+        let setup = MainWindowPage(
+            store: store,
+            stats: unset,
+            preferences: preferences,
+            updates: quiet,
+            mode: .constant(.byProject),
+            query: .constant(""),
+            now: Date(),
+            showingUpdate: .constant(false)
+        )
+        .frame(width: 1000, alignment: .topLeading)
+        .themed(.light)
+        .environment(\.isOffscreenRender, true)
+        .background(Theme.paper.bg)
+        write(setup, to: outputDirectory.appendingPathComponent("light-allowance-setup.png"))
+
         renderStats(
             to: outputDirectory, demo: demo, store: store, preferences: preferences, quiet: quiet
         )
         renderUpdate(
-            to: outputDirectory, updates: updates, preferences: preferences, store: store
+            to: outputDirectory, updates: updates, preferences: preferences,
+            store: store, stats: sessionStats
         )
     }
 
@@ -138,7 +169,8 @@ enum RenderCommand {
     /// at on warm black — while the badge-in-context frame is light only, since what's being
     /// checked there is alignment against the gear button and the tab picker.
     private static func renderUpdate(
-        to directory: URL, updates: UpdateCheck, preferences: AppPreferences, store: SessionStore
+        to directory: URL, updates: UpdateCheck, preferences: AppPreferences,
+        store: SessionStore, stats: StatsStore
     ) {
         guard case .available(let release) = updates.state else {
             print("Update: nothing pending, skipping the update frames")
@@ -155,7 +187,7 @@ enum RenderCommand {
 
         let badged = MainWindowPage(
             store: store,
-            stats: StatsStore(),
+            stats: stats,
             preferences: preferences,
             updates: updates,
             mode: .constant(.byProject),

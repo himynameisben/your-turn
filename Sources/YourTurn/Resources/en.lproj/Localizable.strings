@@ -222,3 +222,7 @@
 "Claude Code's status line now shows what's left, and Your Turn reads it from there." = "Claude Code's status line now shows what's left, and Your Turn reads it from there.";
 "Chained to the status line you already had, which still runs and still prints its own line." = "Chained to the status line you already had, which still runs and still prints its own line.";
 "The numbers arrive after Claude Code's next reply." = "The numbers arrive after Claude Code's next reply.";
+
+/* Allowance rings (masthead) */
+"Claude allowance — not set up" = "Claude allowance — not set up";
+"No Claude reading yet — switch the status-line bridge on in Settings." = "No Claude reading yet — switch the status-line bridge on in Settings.";

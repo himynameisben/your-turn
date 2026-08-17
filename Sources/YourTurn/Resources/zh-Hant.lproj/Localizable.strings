@@ -207,3 +207,7 @@
 "Claude Code's status line now shows what's left, and Your Turn reads it from there." = "Claude Code 的 status line 現在會顯示剩餘額度，Your Turn 從那裡讀。";
 "Chained to the status line you already had, which still runs and still prints its own line." = "串接在你原本的 status line 前面，它照常執行、照常印出自己那一行。";
 "The numbers arrive after Claude Code's next reply." = "數字會在 Claude Code 下一次回覆之後出現。";
+
+/* Allowance rings (masthead) */
+"Claude allowance — not set up" = "Claude 額度 — 尚未啟用";
+"No Claude reading yet — switch the status-line bridge on in Settings." = "尚未讀到 Claude 額度 —— 到設定頁打開 status-line bridge。";

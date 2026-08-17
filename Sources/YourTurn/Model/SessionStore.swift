@@ -8,6 +8,15 @@ final class SessionStore {
     private(set) var isRefreshing = false
     private(set) var lastRefresh: Date?
 
+    /// The flat scan behind `groups`, kept only so the allowance rings have a Codex reading to
+    /// draw without paying for a second scan.
+    ///
+    /// The masthead needs a number every 30 seconds and the Usage tab is only scanned when you
+    /// open it, so the rings can't wait on `StatsStore.load()`. `CodexQuotaReader` needs Codex
+    /// sessions to find a rollout tail to read, and this refresh has just produced them — a
+    /// second `CodexScanner.scan()` would cost 35ms on the timer for rows it already has.
+    private(set) var sessions: [Session] = []
+
     let archive = ArchiveStore()
     let pins = PinStore()
 
@@ -138,9 +147,12 @@ final class SessionStore {
 
         // Scanning is synchronous file I/O (measured ~40ms); offload to background so it
         // doesn't stall the menu's open animation.
-        groups = await Task.detached(priority: .utility) {
-            SessionInventory.groups().groups
+        let scan = await Task.detached(priority: .utility) {
+            let (groups, snapshot) = SessionInventory.groups()
+            return (groups, snapshot.sessions)
         }.value
+        groups = scan.0
+        sessions = scan.1
         lastRefresh = Date()
     }
 

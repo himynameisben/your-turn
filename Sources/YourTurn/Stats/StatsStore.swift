@@ -48,17 +48,30 @@ final class StatsStore {
             UsageScanner.scan(cache: cache)
         }.value
         scan = result
-        // Neither reader shares anything with the scan above: Claude's allowance is one small
-        // file the status-line bridge leaves behind, and Codex's is its own index query plus a
-        // handful of tail reads. Different questions, different disks.
-        quotas = await Task.detached(priority: .userInitiated) {
-            ClaudeQuotaReader.read() + CodexQuotaReader.read(sessions: CodexScanner.scan())
-        }.value
+        await refreshQuotas(sessions: nil)
         overall = await aggregate(result, prices: prices, range: nil)
         summary = period.mode == .all
             ? overall
             : await aggregate(result, prices: prices, range: period.range())
         lastScan = Date()
+    }
+
+    /// Just the two allowance readings, without the 1.0GB scan behind everything else on the page.
+    ///
+    /// Split out because the allowance has a second audience: the session list's masthead rings,
+    /// which need a number on the window's 30-second timer, while the Usage tab is deliberately
+    /// only scanned when you open it. Neither reader shares anything with `UsageScanner` — Claude's
+    /// allowance is one small file the status-line bridge leaves behind, and Codex's is a handful
+    /// of rollout tails. Different questions, different disks.
+    ///
+    /// `sessions` is the session list's own scan handed straight back, so the common caller pays
+    /// nothing; passing `nil` (the Usage tab, which may be open before any session refresh has
+    /// landed) falls back to scanning Codex's index itself.
+    func refreshQuotas(sessions: [Session]?) async {
+        quotas = await Task.detached(priority: .userInitiated) {
+            ClaudeQuotaReader.read()
+                + CodexQuotaReader.read(sessions: sessions ?? CodexScanner.scan())
+        }.value
     }
 
     /// What the usage tab calls when you switch to it.
@@ -118,6 +131,15 @@ final class StatsStore {
         await Task.detached(priority: .userInitiated) {
             UsageStats.build(scan, prices: prices, range: range)
         }.value
+    }
+
+    /// `--render` only: the allowance without the rest of the page.
+    ///
+    /// The session-list frames now draw the masthead rings, so they need a reading — but not the
+    /// 1.0GB scan behind everything else a `StatsStore` holds, and under `--demo` not a real one
+    /// either: a published screenshot must not show how much of somebody's actual week is gone.
+    func loadDemoQuotas(_ quotas: [AgentQuota]) {
+        self.quotas = quotas
     }
 
     /// Demo/preview only (`--render … --demo`). A real scan would put this machine's project
