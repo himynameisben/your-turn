@@ -211,3 +211,7 @@
 /* Allowance rings (masthead) */
 "Claude allowance — not set up" = "Claude 額度 — 尚未啟用";
 "No Claude reading yet — switch the status-line bridge on in Settings." = "尚未讀到 Claude 額度 —— 到設定頁打開 status-line bridge。";
+
+/* Allowance reset, as a wall clock (Usage tab) */
+"Resets at %@" = "%@ 重置";
+"Resets %@ at %@" = "%@ %@ 重置";

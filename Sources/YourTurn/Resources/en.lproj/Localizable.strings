@@ -226,3 +226,7 @@
 /* Allowance rings (masthead) */
 "Claude allowance — not set up" = "Claude allowance — not set up";
 "No Claude reading yet — switch the status-line bridge on in Settings." = "No Claude reading yet — switch the status-line bridge on in Settings.";
+
+/* Allowance reset, as a wall clock (Usage tab) */
+"Resets at %@" = "Resets at %@";
+"Resets %@ at %@" = "Resets %@ at %@";

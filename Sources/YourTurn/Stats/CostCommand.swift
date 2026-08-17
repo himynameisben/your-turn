@@ -115,13 +115,30 @@ enum CostCommand {
             return
         }
         let now = Date()
+        print("time zone           \(TimeZone.current.identifier) (\(offset()))")
         for quota in quotas {
-            let reset = quota.resetsAt.map { ahead($0, from: now) } ?? "—"
+            let reset = quota.resetsAt.map { "\(wallClock($0)) (in \(ahead($0, from: now)))" } ?? "—"
             print("  \(pad(quota.agent.label, 8))\(pad(window(quota.windowMinutes), 9))"
                 + "\(pad(StatsFormat.percentUsed(quota.remainingPercent) + " left", 12))"
-                + "resets in \(pad(reset, 8))"
+                + "resets \(pad(reset, 28))"
                 + "measured \(ago(quota.observedAt, from: now)) ago")
         }
+    }
+
+    /// The wall clock the window prints, in the machine's own zone — both sources report an
+    /// absolute instant (a UTC stamp from Claude, a Unix stamp from Codex), so the conversion is
+    /// the part worth being able to check. Fixed pattern and a fixed locale, unlike the window's:
+    /// this is a column in a verification tool, not a sentence.
+    private static func wallClock(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private static func offset() -> String {
+        let seconds = TimeZone.current.secondsFromGMT()
+        return String(format: "UTC%+03d:%02d", seconds / 3600, abs(seconds / 60) % 60)
     }
 
     // English, like the rest of this file: `AgentQuota.windowLabel` and `RelativeTime` both go

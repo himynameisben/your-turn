@@ -40,7 +40,7 @@ that directory is wiped.
 | `--status-line [on\|off]` | Read or flip the Claude status-line bridge. The only thing in the app that edits a file it doesn't own, so what needs checking isn't "does it install" but "does switching it off put back exactly what was there" — `cp ~/.claude/settings.json /tmp/before && --status-line on && --status-line off && cmp` is the test, and it passes byte-for-byte. Also prints the last reading |
 | `--login-item [on\|off]` | Read or flip the "start at login" registration. Only meaningful from the binary **inside** the .app (`/Applications/YourTurn.app/Contents/MacOS/YourTurn`) — `SMAppService` answers for the bundle it runs in, and there's no other way to check: these registrations don't show up in AppleScript's login-item list, and the system's database needs root |
 | `--update-check` | Print the running version, GitHub's latest release, the verdict, and the version-ordering table (including the two pairs a string comparison gets wrong). Always fetches, ignoring the daily throttle. Also prints what the **app** last stored and how that resolves — the only way to see whether the launch-time check fired, since a machine that's up to date has no UI at all. Seed `updateCheckLatestVersion` / `updateCheckLatestPage` in UserDefaults to exercise the notice without publishing a release |
-| `--render <dir> [--demo]` | Offscreen-render the main window in every palette — all four tabs via `MainWindowPage` with the mode pinned, so each PNG is literally the page a user sees — plus `light-narrow.png` (the 720pt minimum width), `light-allowance-setup.png` (the masthead before the status-line bridge is switched on), the update sheet, and the menu bar panel's footer. `--demo` renders invented sessions and invented usage instead of the real scan — **required for anything published**, since a real scan puts your own titles, prompts, summaries and actual spend in the picture |
+| `--render <dir> [--demo]` | Offscreen-render the main window in every palette — all four tabs via `MainWindowPage` with the mode pinned, so each PNG is literally the page a user sees — plus `light-narrow.png` (the 720pt minimum width), `light-allowance-setup.png` (the masthead before the status-line bridge is switched on), `light-allowance-hover.png` (the kicker resting and hovered, stacked, to prove the rings don't move), `light-usage-narrow.png` (the Usage tab at 720pt, where the allowance row is tightest), the update sheet, and the menu bar panel's footer. `--demo` renders invented sessions and invented usage instead of the real scan — **required for anything published**, since a real scan puts your own titles, prompts, summaries and actual spend in the picture |
 
 **Session-layer changes: run `--dump`. Usage-layer changes: run `--cost`. Update-layer
 changes: run `--update-check`. Status-line-bridge changes: run `--status-line`, and check the
@@ -431,12 +431,22 @@ Two agents, three windows, and the only numbers on the Usage tab that aren't mon
   headline its line; at 18pt a gauge that isn't full is legible without reading anything at all.
   So the session list gets rings and the Usage tab keeps the labelled bars — the same fact at two
   distances, not the same control twice.
-- **The detail replaces the dateline it sits next to** — same row, same font, so revealing it moves
-  nothing on the page and it appears where the eye already is. It's kept to roughly the length of a
-  date, because the dateline is one line at 720pt and a detail truncating to "Claude · 7-d…" is
-  worse than the date it replaced; the reset time is what gives way, and it survives in the
-  `.help()` tooltip and in full on the page the ring links to. A popover was not used: a floating
-  panel over a window whose whole design is flat.
+- **The detail is drawn *after* the rings, and nothing before them may change size** — it first
+  replaced the dateline, which sits before the rings in that row. Measured with a real cursor:
+  arriving at a ring made the text longer, that pushed the rings right, out from under the cursor,
+  which ended the hover, which shortened the text and slid them back under it. A layout feedback
+  loop at refresh rate — and because the hover state lived in `MainWindowPage`, every iteration
+  repainted the masthead, every project block and every session line. It beachballed. So the
+  dateline is `.fixedSize()`, the detail appears to the right of the rings where it can only grow
+  into empty space, and the ring's hit target is a fixed 22pt box rather than the ring drawn inside
+  it — hit-testing a shape that resizes with its own hover state is the same bug one level down.
+  `MastheadKicker` owns the hover state for the same reason: one line of the header should not
+  repaint the page it sits on. A popover was not used either: a floating panel over a window whose
+  whole design is flat.
+- **`--render` emits `light-allowance-hover.png`, resting above and hovered below** — the bug was
+  invisible in every screenshot of the resting state, which is precisely why that frame exists:
+  the rings either line up between the two rows or they don't. Measured on the frame: ring 1 at
+  x 333–373 and ring 3 at x 449–489 in both, ring 2 growing around an unchanged centre.
 - **The allowance rings force the reading off the Usage tab's scan** — that scan is 1.5s cold and
   deliberately only runs when you open the tab, so `StatsStore.refreshQuotas` is split out and
   rides the window's 30-second session timer instead. It costs one small file plus a handful of
@@ -460,6 +470,24 @@ Two agents, three windows, and the only numbers on the Usage tab that aren't mon
   footer says "You've used 82%"), and this is the one place the app deliberately inverts a source.
   The question is whether there's room to start something. The bar drains, green until 20% and
   amber below it — the same amber as the session chips, and the only threshold on the page.
+- **The Usage tab prints a wall clock, the masthead prints a countdown** — the same instant, two
+  registers, because they answer different questions. "in 1d" is what you need before starting
+  something; "Resets Aug 19 at 8:00 AM" is what you need to plan around, and a weekly window that
+  comes back at a fixed hour makes the difference between planning and waiting. Both sources report
+  an absolute instant — a UTC stamp from Claude (`2026-08-19T00:00:00Z`), a Unix stamp from Codex —
+  so formatting puts it in the reader's own zone by construction. Cross-checked against Claude
+  Code's own footer, which says "resets Ag 19 at 8am (Asia/Taipei)" for the same window;
+  `--cost` prints the zone and offset next to it so the conversion can be checked rather than
+  assumed. Date and time are formatted as two fields so English reads "Aug 19 at 8:00 AM" rather
+  than "at Aug 19, 8:00 AM", and via `setLocalizedDateFormatFromTemplate("jm")` rather than a fixed
+  pattern, so a 24-hour locale gets a 24-hour clock.
+- **The allowance bar has a fixed width and the footnote never truncates** — both settled by the
+  720pt frame. Letting the bar absorb the leftover space made each row's track a different length
+  (measured: 50pt apart), and three gauges you can't compare to each other are three gauges doing a
+  third of their job. With the bar fixed, the reset time is what wouldn't fit — so the row is
+  `ViewThatFits`, longest version first: the age (`· measured 3h ago`) drops out whole at 720pt
+  rather than the line ending in "…9:1…". The demo's Codex reading is deliberately stale enough to
+  earn that second half, so the frame actually exercises the long variant.
 - **The reading is an observation with a timestamp, for both agents** — neither is queried live:
   Codex's comes off the last turn on disk, Claude's off the last status-line render. The age is
   printed only once it passes an hour, because "measured 2m ago" on every fresh row is noise that

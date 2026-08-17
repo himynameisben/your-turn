@@ -36,6 +36,38 @@ struct AgentQuota: Sendable, Equatable, Identifiable {
     /// chips use for "your turn", and for the same reason: it's the point where you need to know.
     var isLow: Bool { remainingPercent < 20 }
 
+    /// When the window comes back, as a wall clock rather than a countdown.
+    ///
+    /// The countdown ("in 1d") is the right register for the masthead, where the question is
+    /// whether to start something now. On the Usage tab the question is when you get your
+    /// allowance back, and "in 1d" can't answer it — the weekly window resets at a fixed hour,
+    /// and knowing it's 8am tomorrow rather than some point during the day is the difference
+    /// between planning around it and waiting for it.
+    ///
+    /// Formatting puts it in the reader's own zone by construction: `resetsAt` is an absolute
+    /// instant, built from a UTC stamp on Claude's side (`2026-08-19T00:00:00Z`) and a Unix
+    /// stamp on Codex's, and neither is a time anybody's day is organised around.
+    ///
+    /// Split into a date and a time so English can say "Aug 19 at 8:00 AM" rather than the "at
+    /// Aug 19, 8:00 AM" a single field would force; the same two pieces read as "8月19日 上午8:00"
+    /// in zh-Hant. And templates rather than fixed patterns: `jm` resolves to whichever of the
+    /// 12- and 24-hour clock the locale uses, which a hardcoded `HH:mm` would silently override.
+    func resetsText(now: Date, calendar: Calendar = .current) -> String? {
+        guard let resetsAt else { return nil }
+        let time = Self.formatted(resetsAt, template: "jm")
+        guard !calendar.isDate(resetsAt, inSameDayAs: now) else { return L("Resets at \(time)") }
+        return L("Resets \(Self.formatted(resetsAt, template: "MMMd")) at \(time)")
+    }
+
+    /// `Localization.locale`, not `Locale.current` — the same rule the masthead's dateline
+    /// follows. An English UI on a Taiwanese machine must not print 上午 under an English headline.
+    private static func formatted(_ date: Date, template: String) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Localization.locale
+        formatter.setLocalizedDateFormatFromTemplate(template)
+        return formatter.string(from: date)
+    }
+
     /// Reads as an adjective, not a duration — it lands inside "left of your … allowance", where
     /// "7 days allowance" is wrong in English and "7-day allowance" is right. zh-Hant needs no
     /// such distinction and maps both to 天.

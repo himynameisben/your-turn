@@ -137,10 +137,6 @@ struct MainWindowPage: View {
     @Environment(\.theme) private var theme
     @Environment(\.isOffscreenRender) private var isOffscreenRender
 
-    /// Which ring the cursor is on. Lives here rather than in the cluster because the detail it
-    /// reveals is printed by the dateline, one view up.
-    @State private var hoveredAllowance: AllowanceRings.Item?
-
     var body: some View {
         // VStack, not LazyVStack: project counts run from single digits to the teens, so lazy
         // loading saves nothing — and it would just as surely leave offscreen rendering with
@@ -177,25 +173,15 @@ struct MainWindowPage: View {
     private var masthead: some View {
         HStack(alignment: .top, spacing: 24) {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 14) {
-                    Text(hoveredAllowance?.summary() ?? datelineText)
-                        .font(Theme.meta)
-                        .tracking(0.6)
-                        .foregroundStyle(theme.faint)
-                        .lineLimit(1)
+                MastheadKicker(
+                    dateline: datelineText,
                     // Only on the session list. The Usage tab draws the same numbers in full a
                     // screen below, and a control whose whole job is "take me there" has nothing
                     // to offer once you're already there.
-                    if mode.isSessionList {
-                        AllowanceRings(
-                            quotas: stats.quotas,
-                            now: now,
-                            hovered: $hoveredAllowance,
-                            onSelect: select
-                        )
-                    }
-                    Spacer(minLength: 0)
-                }
+                    quotas: mode.isSessionList ? stats.quotas : [],
+                    now: now,
+                    onSelect: select
+                )
                 Text(headlineText)
                     .font(Theme.display)
                     .foregroundStyle(theme.text)
@@ -362,6 +348,81 @@ struct MainWindowPage: View {
     }
 }
 
+// MARK: - Masthead kicker
+
+/// The small line above the headline: the date, the allowance rings, and — while the cursor is on
+/// one — what that ring says.
+///
+/// **A view of its own, holding the hover state, for two reasons that both showed up the moment
+/// this was used with a real mouse.**
+///
+/// The first is cost. Kept in `MainWindowPage`, every hover invalidated that whole body: the
+/// masthead, thirty-odd project blocks and every session line under them. One line of the header
+/// should not repaint the page it sits on.
+///
+/// The second is worse, and it's why the detail is drawn *after* the rings instead of replacing
+/// the dateline. Swapping the dateline changes its width, the rings sit after it in the row, and
+/// so they slid right the instant the cursor arrived — out from under the cursor, which ended the
+/// hover, which restored the short text, which slid them back under it. A layout feedback loop
+/// running at refresh rate, repainting everything each time round: it beachballed. Nothing before
+/// the rings changes size now, so nothing can move them.
+struct MastheadKicker: View {
+    let dateline: String
+    let quotas: [AgentQuota]
+    let now: Date
+    let onSelect: (AllowanceRings.Item) -> Void
+
+    @Environment(\.theme) private var theme
+    @State private var hovered: AllowanceRings.Item?
+
+    /// `initialHover` exists for `--render` alone. The bug this view was rewritten for was a
+    /// layout bug that only appeared under the cursor, and a screenshot of the resting state
+    /// could never have shown it — so the hovered state gets a frame of its own, where the two
+    /// are stacked and the rings either line up or they don't.
+    init(
+        dateline: String,
+        quotas: [AgentQuota],
+        now: Date,
+        onSelect: @escaping (AllowanceRings.Item) -> Void,
+        initialHover: AllowanceRings.Item? = nil
+    ) {
+        self.dateline = dateline
+        self.quotas = quotas
+        self.now = now
+        self.onSelect = onSelect
+        _hovered = State(initialValue: initialHover)
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text(dateline)
+                .font(Theme.meta)
+                .tracking(0.6)
+                .foregroundStyle(theme.faint)
+                .lineLimit(1)
+                .fixedSize()
+
+            if !quotas.isEmpty {
+                AllowanceRings(quotas: quotas, now: now, hovered: $hovered, onSelect: onSelect)
+
+                if let hovered {
+                    Text(hovered.summary())
+                        .font(Theme.meta)
+                        .tracking(0.6)
+                        .foregroundStyle(theme.muted)
+                        .lineLimit(1)
+                        // Everything to the left of this is fixed width, so this can only ever
+                        // grow into the empty half of the row — and at the window's 720pt minimum,
+                        // where there is less of that, it truncates instead of pushing.
+                        .transition(.opacity)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .animation(.easeOut(duration: 0.1), value: hovered)
+    }
+}
+
 // MARK: - Allowance rings
 
 /// The allowance, in the masthead, as one ring per window.
@@ -441,8 +502,20 @@ struct AllowanceRings: View {
             isLow: quota?.isLow ?? false,
             highlighted: hovered == item
         )
+        // The hit target is this fixed 22pt box, not the ring drawn inside it. `AllowanceRing`
+        // grows a little when highlighted, and hit-testing a shape that changes size with the
+        // hover state is how you get a control that flickers on its own edge. It also makes an
+        // 18pt target easier to land on.
+        .frame(width: 22, height: 22)
         .contentShape(.rect)
-        .onHover { hovered = $0 ? item : (hovered == item ? nil : hovered) }
+        .onHover { inside in
+            // Assign only on a real change: an unchanged `@State` write still invalidates.
+            if inside {
+                if hovered != item { hovered = item }
+            } else if hovered == item {
+                hovered = nil
+            }
+        }
         .onTapGesture { onSelect(item) }
         .help(item.detail(now: now))
     }

@@ -296,17 +296,22 @@ private struct AllowanceBar: View {
     private var fraction: Double { quota.remainingPercent / 100 }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             // Product name plus window, never translated on the agent half — "Claude · 7-day".
             Text("\(quota.agent.label) · \(quota.windowLabel)")
                 .font(Theme.meta)
                 .foregroundStyle(theme.muted)
                 .lineLimit(1)
-                .frame(width: 108, alignment: .leading)
+                .frame(width: 104, alignment: .leading)
 
             // The bar drains rather than fills. Both agents report what's been *used*, and this
             // is the one place the app deliberately says it the other way round — the fuel-gauge
             // reading is the one you can act on.
+            //
+            // A fixed width, not a flexible one. Letting it absorb the leftover space made every
+            // row's track a different length — measured at 720pt, one row's track ran 50pt longer
+            // than the next — and three gauges you can't compare to each other are three gauges
+            // doing a third of their job.
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(theme.rule)
@@ -315,21 +320,35 @@ private struct AllowanceBar: View {
                         .frame(width: max(2, geo.size.width * fraction))
                 }
             }
-            .frame(height: 6)
-            .frame(maxWidth: 170)
+            .frame(width: 116, height: 6)
 
             Text(L("\(StatsFormat.percentUsed(quota.remainingPercent)) left"))
                 .font(Theme.meta)
                 .foregroundStyle(theme.text)
                 .lineLimit(1)
-                .frame(width: 76, alignment: .leading)
+                .frame(width: 68, alignment: .leading)
 
-            Text(footnote)
-                .font(Theme.meta)
-                .foregroundStyle(theme.faint)
-                .lineLimit(1)
+            footnote
 
             Spacer(minLength: 0)
+        }
+    }
+
+    /// Nothing here truncates. Everything to the left is fixed, so the space left for this is
+    /// known — and at the window's 720pt minimum it fits the reset time and not much else. So the
+    /// age drops out whole rather than the line ending in "…9:1…": `ViewThatFits` picks the
+    /// longest version that still fits, and the reset time is the part that always survives.
+    @ViewBuilder
+    private var footnote: some View {
+        let reset = quota.resetsText(now: now)
+        ViewThatFits(in: .horizontal) {
+            ForEach([[reset, measured], [reset]], id: \.self) { parts in
+                Text(parts.compactMap { $0 }.joined(separator: " · "))
+                    .font(Theme.meta)
+                    .foregroundStyle(theme.faint)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
         }
     }
 
@@ -339,13 +358,10 @@ private struct AllowanceBar: View {
     /// its number frozen. A stale percentage presented as current is the one way this row could
     /// mislead, and an "measured 2m ago" on every fresh reading is noise that trains you to stop
     /// reading it. One hour is the line: shorter than any of these windows, longer than a break.
-    private var footnote: String {
-        let reset = quota.resetsAt.map { L("Resets \(RelativeTime.until($0, from: now))") }
-        let age = now.timeIntervalSince(quota.observedAt)
-        let measured = age > 3600
+    private var measured: String? {
+        now.timeIntervalSince(quota.observedAt) > 3600
             ? L("measured \(RelativeTime.format(quota.observedAt, from: now))")
             : nil
-        return [reset, measured].compactMap { $0 }.joined(separator: " · ")
     }
 }
 

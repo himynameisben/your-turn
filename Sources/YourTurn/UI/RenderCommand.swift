@@ -152,6 +152,27 @@ enum RenderCommand {
         .background(Theme.paper.bg)
         write(setup, to: outputDirectory.appendingPathComponent("light-allowance-setup.png"))
 
+        // Resting above, hovered below, same width, same everything else. The rings have to sit at
+        // the same x in both — the first version of this row put the detail *before* them, so
+        // arriving with the cursor pushed them right, out from under it, which ended the hover and
+        // pushed them back. That loop ran at refresh rate and repainted the whole page each time.
+        // A frame of the resting state alone could never have shown it.
+        let quotas = DemoData.quotas(now: Date())
+        let hover = VStack(alignment: .leading, spacing: 26) {
+            MastheadKicker(dateline: "August 17 · Monday", quotas: quotas, now: Date()) { _ in }
+            MastheadKicker(
+                dateline: "August 17 · Monday", quotas: quotas, now: Date(), onSelect: { _ in },
+                initialHover: .quota(quotas[1])
+            )
+        }
+        .padding(.horizontal, Theme.pageInset)
+        .padding(.vertical, 24)
+        .frame(width: 720, alignment: .topLeading)
+        .themed(.light)
+        .environment(\.isOffscreenRender, true)
+        .background(Theme.paper.bg)
+        write(hover, to: outputDirectory.appendingPathComponent("light-allowance-hover.png"))
+
         renderStats(
             to: outputDirectory, demo: demo, store: store, preferences: preferences, quiet: quiet
         )
@@ -246,6 +267,27 @@ enum RenderCommand {
             write(page, to: directory.appendingPathComponent("\(appearance.rawValue)-usage.png"))
         }
 
+        // The same page at the window's 720pt minimum, for the same reason `light-narrow.png`
+        // exists one page over. The allowance row is the one here that can't simply wrap: a
+        // fixed label, a bar, a percentage and a reset time on one line, and the reset time grew
+        // from a countdown ("in 1d") to a wall clock ("Aug 19 at 8:00 AM"). Whether that still
+        // fits is a question only this frame answers.
+        let narrow = MainWindowPage(
+            store: store,
+            stats: stats,
+            preferences: preferences,
+            updates: quiet,
+            mode: .constant(.usage),
+            query: .constant(""),
+            now: Date(),
+            showingUpdate: .constant(false)
+        )
+        .frame(width: 720, alignment: .topLeading)
+        .themed(.light)
+        .environment(\.isOffscreenRender, true)
+        .background(Theme.paper.bg)
+        write(narrow, to: directory.appendingPathComponent("light-usage-narrow.png"))
+
         // One extra frame with a month selected. The filtered layout differs in three places
         // — the stepper appears, the three tiles change meaning, and the heatmap dims
         // everything outside the selection — and none of that is visible in a screenshot of
@@ -337,10 +379,12 @@ private enum DemoData {
                 resetsAt: now.addingTimeInterval(1.6 * 86_400),
                 observedAt: now.addingTimeInterval(-4 * 60)
             ),
+            // Deliberately stale enough to earn the "measured …" half of the footnote: that is
+            // the long variant of the row, and the one the 720pt frame has to prove still fits.
             AgentQuota(
                 agent: .codex, usedPercent: 46, windowMinutes: 10080,
                 resetsAt: now.addingTimeInterval(3.2 * 86_400),
-                observedAt: now.addingTimeInterval(-12 * 60)
+                observedAt: now.addingTimeInterval(-3.4 * 3600)
             ),
         ]
     }
