@@ -6,10 +6,17 @@ import Foundation
 /// Claude Code writes `system/turn_duration` at the end of every turn, then (if you've
 /// stepped away) writes `system/away_summary`. So "the tail is a system wrap-up record"
 /// is equivalent to "Claude has stopped."
+///
+/// Codex spells the same thing with explicit events and is easier to read for it: a turn opens
+/// with `task_started` and closes with `task_complete` or `turn_aborted`, so the last of those
+/// three *is* the marker. Measured across 459 rollouts: 2,615 starts against 2,525 completes
+/// plus 81 aborts — the 9 left over are the crashes, which land on `.inProgress` and then age
+/// out of `running` on the clock, exactly like a Claude session that died mid-turn.
 enum TailMarker: Sendable, Equatable {
-    /// The turn has ended (`turn_duration` / `away_summary`) — Claude is stopped, waiting for you
+    /// The turn has ended (`turn_duration` / `away_summary`; `task_complete` / `turn_aborted`)
+    /// — the agent is stopped, waiting for you
     case turnEnded
-    /// The tail is still a user/assistant message; the turn hasn't wrapped up yet
+    /// The tail is still a user/assistant message, or an unclosed `task_started`
     case inProgress
     /// No message record found within the tail 64KB
     case unknown
@@ -47,6 +54,9 @@ enum SessionState: Sendable, Equatable {
 
 struct Session: Identifiable, Sendable {
     let id: String
+    /// Which agent wrote it. Decides the resume command and the row's badge; everything else
+    /// downstream treats the two identically.
+    let agent: Agent
     let fileURL: URL
     let projectPath: String
     let gitBranch: String?

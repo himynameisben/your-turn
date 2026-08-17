@@ -201,3 +201,16 @@
 "%@ · nothing" = "%@ · nothing";
 "%@ · %@ tokens · %@" = "%@ · %@ tokens · %@";
 "Totals" = "Totals";
+
+/* Codex allowance (Usage tab) */
+"Codex allowance" = "Codex allowance";
+"of your %@ allowance" = "of your %@ allowance";
+"Resets %@" = "Resets %@";
+"measured %@" = "measured %@";
+
+"%lld-day" = "%lld-day";
+"%lld-hour" = "%lld-hour";
+"any moment" = "any moment";
+"in %lldm" = "in %lldm";
+"in %lldh" = "in %lldh";
+"in %lldd" = "in %lldd";

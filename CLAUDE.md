@@ -1,12 +1,12 @@
 # Your Turn
 
-macOS menu bar app: an inbox for Claude Code. It answers three questions —
-**which sessions are open? which one is waiting for me? where did it stop, and
-what's next?**
+macOS menu bar app: an inbox for your coding agents — Claude Code and Codex. It answers
+three questions — **which sessions are open? which one is waiting for me? where did it
+stop, and what's next?**
 
-Core premise: Claude Code already writes the answers into `~/.claude`. This app is a
-**reader** — it runs no LLM, doesn't parse conversation content, and treats
-`~/.claude` as **read-only** (preferences like stars/archive live in UserDefaults).
+Core premise: both agents already write the answers into `~/.claude` and `~/.codex`. This
+app is a **reader** — it runs no LLM, doesn't parse conversation content, and treats both
+directories as **read-only** (preferences like stars/archive live in UserDefaults).
 
 - Swift 6 / SwiftUI / macOS 15+, no third-party packages
 - `LSUIElement`: no Dock icon, no Cmd-Tab entry
@@ -52,11 +52,16 @@ Sources/YourTurn/
 ├── YourTurnApp.swift           @main. CLI flags are intercepted before any scene is created
 ├── DumpCommand.swift           --dump / --triage / --next
 ├── Scanner/                    reads disk, contains no judgment
+│   ├── SessionInventory.swift  the one place both agents' scans combine; --dump and the app share it
 │   ├── SessionScanner.swift    scans ~/.claude/projects, parses into [Session] concurrently
 │   ├── JSONLTailReader.swift   reads only the last 64KB of a file: title / summary / times
 │   ├── SessionRegistry.swift   reads ~/.claude/sessions/<pid>.json (pid ↔ sessionId)
-│   └── ProcessProbe.swift      pgrep/lsof/ps to find live claude processes and the app hosting each
+│   ├── CodexScanner.swift      ~/.codex/state_*.sqlite (system SQLite3, no package) → [Session]
+│   ├── RolloutTailReader.swift Codex rollout tail: turn state + the agent's closing message
+│   ├── CodexLockProbe.swift    lsof on thread-writer-locks/<id>.lock → exact pid ↔ thread
+│   └── ProcessProbe.swift      pgrep/lsof/ps to find live agent processes and the app hosting each
 ├── Model/                      judgment and state
+│   ├── Agent.swift             claude | codex — resume command, process name, row badge
 │   ├── Session.swift           a single session and its state (running/awaiting/finished)
 │   ├── SessionResolver.swift   session × process × registry → ProjectGroup
 │   ├── SessionStore.swift      @Observable, the UI's single source of truth
@@ -73,6 +78,7 @@ Sources/YourTurn/
 │   ├── ProjectRoot.swift       rolls a cwd up to its git repository
 │   ├── UsageStats.swift        aggregation: by day / model / project, plus rhythm
 │   ├── StatsFormat.swift       $ / token / duration formatting, shared with the CLI
+│   ├── CodexQuota.swift        Codex's allowance %, deliberately not dollars
 │   ├── StatsStore.swift        @Observable, scans when the usage window opens
 │   └── CostCommand.swift       --cost
 ├── Actions/
@@ -97,7 +103,7 @@ Sources/YourTurn/
 docs/RELEASING.md               signing & notarization playbook
 ```
 
-## Data sources (all inside `~/.claude`)
+## Data sources (`~/.claude` and `~/.codex`)
 
 | Path | What it provides |
 |---|---|
@@ -105,6 +111,14 @@ docs/RELEASING.md               signing & notarization playbook
 | `sessions/<pid>.json` | **live registry**: `pid` ↔ `sessionId`, plus Claude's self-reported `status` (busy/idle/waiting) and `waitingFor` |
 | `ide/<port>.lock` | SSE port → the editor's workspace path. Written by the Claude Code editor extension, so it's the same shape for VS Code, its forks and JetBrains. It also carries `ideName` (`vscode.env.appName`), which goes **unread** — `__CFBundleIdentifier` answers "which app" exactly, and for hosts that ship no extension at all |
 | `projects/<slug>/<uuid>/subagents/agent-*.jsonl` | **usage only**: subagent transcripts. Invisible to the session scanner by design, mandatory for the cost scanner |
+
+Codex, under `~/.codex`:
+
+| Path | What it provides |
+|---|---|
+| `state_<n>.sqlite` → `threads` | the index Claude Code has no equivalent of: `id`, `cwd`, `title`, `first_user_message`, `git_branch`, `updated_at_ms`, `rollout_path`, `source`. Measured 458 of 459 rows carry a title *and* a first message |
+| `sessions/<yyyy>/<mm>/<dd>/rollout-*.jsonl` | the transcript. Only its tail is read, for the turn boundary (`task_started` / `task_complete` / `turn_aborted`), `task_complete.last_agent_message`, and `token_count.rate_limits` |
+| `thread-writer-locks/<thread-id>.lock` | **live registry**: a running thread holds this fd open, and the filename is the thread id — so `lsof` gives pid ↔ thread with no guessing |
 
 Usage additionally needs `message.usage` (all five token buckets plus `iterations`),
 `requestId`, and `system/turn_duration`'s `durationMs`. There is **no cost field in the
@@ -139,6 +153,66 @@ comments in the corresponding file (they carry the numbers).
   a bug).
 - **Live sessions must not be `--resume`d** — that spawns a second process for the
   same session. If it's alive, switch back to its original terminal window/tab.
+### Codex is a second agent, not a second data source
+
+Everything downstream of `Session` is shared — grouping, state, jumping, archiving. The two
+scanners agree on nothing above that line, and each disagreement is measured.
+
+- **The database answers "what is this session", the tail answers "what is it doing"** —
+  Claude Code keeps no index, so title/cwd/branch/prompt all come out of the transcript tail
+  (measured 93% / 99% coverage). Codex keeps `threads` in SQLite, where all four are columns
+  and **458 of 459** rows have them. So `CodexScanner` reads the tail for exactly two things
+  the database doesn't track: whether the current turn ended, and what was said last.
+- **The system SQLite3 is enough** — `import SQLite3` needs no package, which is what keeps
+  the "no third-party packages" rule intact.
+- **Every Codex read failure means "no Codex sessions", never a crash** — the trailing number
+  in `state_5.sqlite` is a schema-migration counter (`logs_2`, `goals_1`, `memories_1`,
+  `queue_1` alongside it), so the format has already been rewritten five times. The file is
+  found by globbing for the highest `state_<n>`, the query names only the seven columns used,
+  and a failed `prepare` returns an empty list. No Codex, an older Codex and a newer Codex all
+  take the same quiet path.
+- **`thread-writer-locks/<id>.lock` beats a registry file** — a live thread holds the fd open
+  and the filename *is* the thread id, so `lsof` yields pid ↔ thread exactly, with no top-N
+  guess anywhere. It's better evidence than Claude's registry too, because the kernel owns it:
+  an entry can't outlive its process the way a `-9`'d session leaves its JSON behind. Measured
+  on this machine: **5/5 live sessions bound exactly**, zero guesses.
+- **The guess never crosses agents** — `AgentProcess` carries its `Agent` because a lock-less
+  `codex` app-server sits in a real project cwd (measured `/Users/ben/code/ios-app/cat-mine`),
+  so a folder with one Claude session and one idle Codex server would otherwise report the
+  Claude session live off the back of the wrong process. Same class of error as the 11→56
+  inflation.
+- **`RegisteredSession.status` is optional, and that's the whole integration** — Codex reports
+  no status anywhere, so a Codex binding proves *which* process without saying what it's doing.
+  The resolver falls back to `Session.state(hasLiveProcess:)`, the identical route an
+  unregistered Claude session takes, which also keeps the 60-second window that ages a crashed
+  mid-turn thread out of "running".
+- **Only the first 256 bytes of a rollout record are searched** — the `"payload":{"type":"`
+  discriminator is measured never to start later than **82 bytes** in, across 1,327 records.
+  Scanning whole lines instead measured **207ms per 48 files against 20ms**: rollout lines run
+  to tens of KB of reasoning and tool output, and Swift's `contains` walks every byte for
+  grapheme correctness. The window also kills a false-positive class — prose quoting
+  "user_message" can no longer pass for the record type. Cost after the fix: **16ms** for 48
+  threads, against 54ms for Claude's 142.
+- **The approval gap is left open rather than faked** — Claude's registry says
+  `waitingFor: "input needed"`. Searched every rollout: Codex writes **no approval request to
+  disk at all** (only `turn_aborted`, 81 times). So a Codex row can say "idle, your move" but
+  never "blocked on a dialog", and the amber chip simply never appears on one.
+- **tmux is the one host given up on** — see below; unchanged by any of this.
+
+- **No dollars for Codex** — `total_token_usage` is a **running total for the whole thread**,
+  re-emitted every turn, so the `requestId` dedup the Claude pipeline is built on has nothing
+  to dedup and summing rows would multiply a thread's usage by its turn count. The account is
+  also a subscription, so a token-derived figure would describe a bill nobody receives. What
+  Codex does report is the allowance — measured `used_percent` 46.0 over a `window_minutes` of
+  10080 with a `resets_at` — and that's the entire model: one number, one clock, drawn as a bar
+  because it's the only quantity on that page with a ceiling.
+- **The agent badge only appears when both agents are present** — `SessionStore.showsAgentBadges`.
+  A Claude-only user sees the list exactly as before; stamping the same word down every row of a
+  single-agent column is noise carrying no information.
+- **`SessionInventory` exists so `--dump` can't drift from the app** — the CLI is this project's
+  only way to check a session-layer change, and a verification tool that assembles its inputs
+  differently from the thing it verifies is worse than none. Both call the same function.
+
 - **Which app to jump to is `__CFBundleIdentifier`, never `TERM_PROGRAM`** — the env var that
   names the terminal cannot name the app. Cursor, Windsurf and VSCodium all report
   `TERM_PROGRAM=vscode`, so a jump keyed on that opens Visual Studio Code for someone sitting

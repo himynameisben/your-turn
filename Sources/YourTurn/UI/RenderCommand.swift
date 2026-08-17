@@ -247,7 +247,7 @@ enum RenderCommand {
         let stats = StatsStore()
         stats.period = period
         guard !demo else {
-            stats.loadDemo(DemoData.usage(now: Date()))
+            stats.loadDemo(DemoData.usage(now: Date()), quota: DemoData.quota(now: Date()))
             return stats
         }
         var done = false
@@ -288,6 +288,17 @@ enum RenderCommand {
 /// a trailing "Next: …" sentence — so the demo exercises the real extraction path instead
 /// of hardcoding the line the UI ends up showing.
 private enum DemoData {
+    /// Invented, like everything else here — a real reading would publish how much of someone's
+    /// actual Codex allowance they've burned this week.
+    static func quota(now: Date) -> CodexQuota {
+        CodexQuota(
+            usedPercent: 46,
+            windowMinutes: 10080,
+            resetsAt: now.addingTimeInterval(3.2 * 86_400),
+            observedAt: now.addingTimeInterval(-12 * 60)
+        )
+    }
+
     static func groups(now: Date) -> [ProjectGroup] {
         [
             group("weather-cli", [
@@ -342,6 +353,23 @@ private enum DemoData {
                     state: .awaiting,
                     live: .idle,
                     now: now
+                ),
+                // The one Codex row, and it sits in a project that also has a Claude one —
+                // which is the only arrangement that shows what the badge is for. `live` is
+                // nil rather than `.idle`: Codex reports no status, so a demo that gave it one
+                // would picture a state the real app can never reach.
+                item(
+                    title: "Port the search index to the new schema",
+                    you: "Move the search index over to the v2 schema and keep the old one readable",
+                    claude: """
+                        The v2 writer is in and both readers pass the fixture suite. The old index \
+                        is still on disk untouched, so nothing is lost if this needs backing out.
+                        """,
+                    minutesAgo: 12,
+                    state: .awaiting,
+                    live: nil,
+                    now: now,
+                    agent: .codex
                 ),
             ]),
             group("budget-tracker", [
@@ -470,12 +498,14 @@ private enum DemoData {
         minutesAgo: Double,
         state: SessionState,
         live: LiveStatus?,
-        now: Date
+        now: Date,
+        agent: Agent = .claude
     ) -> Row {
         { path in
             ResolvedSession(
                 session: Session(
                     id: UUID().uuidString,
+                    agent: agent,
                     fileURL: URL(fileURLWithPath: "\(path)/.demo.jsonl"),
                     projectPath: path,
                     gitBranch: "main",
@@ -489,7 +519,8 @@ private enum DemoData {
                 // nil: the demo never claims a live terminal, so a stray click can't
                 // AppleScript its way into a window that doesn't exist.
                 process: nil,
-                live: live
+                live: live,
+                exactMatch: live != nil
             )
         }
     }

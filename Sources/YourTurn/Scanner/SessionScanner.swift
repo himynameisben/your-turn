@@ -57,6 +57,7 @@ enum SessionScanner {
 
         return Session(
             id: scan.sessionId ?? file.url.deletingPathExtension().lastPathComponent,
+            agent: .claude,
             fileURL: file.url,
             projectPath: cwd,
             gitBranch: scan.gitBranch,

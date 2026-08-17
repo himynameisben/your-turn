@@ -18,6 +18,9 @@ final class StatsStore {
     private(set) var prices = PriceTable.load()
     private(set) var isScanning = false
     private(set) var lastScan: Date?
+    /// nil for anyone without Codex, which is the only reason the page can decide whether to
+    /// draw that section at all.
+    private(set) var codexQuota: CodexQuota?
 
     var period = UsagePeriod.all {
         didSet {
@@ -44,6 +47,11 @@ final class StatsStore {
             UsageScanner.scan(cache: cache)
         }.value
         scan = result
+        // Its own index query and a handful of tail reads — it shares nothing with the Claude
+        // scan above, because the two answer different questions off different disks.
+        codexQuota = await Task.detached(priority: .userInitiated) {
+            CodexQuotaReader.read(sessions: CodexScanner.scan())
+        }.value
         overall = await aggregate(result, prices: prices, range: nil)
         summary = period.mode == .all
             ? overall
@@ -117,12 +125,13 @@ final class StatsStore {
     /// the demo through the real pricing, the real aggregation and the real period filter, so
     /// the screenshot stays evidence that those work. Synchronous because `ImageRenderer`
     /// won't wait for a Task — set `period` before calling this, not after.
-    func loadDemo(_ scan: UsageScanner.Result) {
+    func loadDemo(_ scan: UsageScanner.Result, quota: CodexQuota? = nil) {
         self.scan = scan
         overall = UsageStats.build(scan, prices: prices, range: nil)
         summary = period.mode == .all
             ? overall
             : UsageStats.build(scan, prices: prices, range: period.range())
+        codexQuota = quota
         lastScan = Date()
     }
 }

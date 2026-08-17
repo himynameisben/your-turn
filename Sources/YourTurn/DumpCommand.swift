@@ -7,19 +7,12 @@ import Foundation
 /// state detection is correct.
 enum DumpCommand {
     static func run() {
-        let started = Date()
-        let sessions = SessionScanner.scan()
-        let scanTime = Date().timeIntervalSince(started)
-
-        let probeStarted = Date()
-        let processes = ProcessProbe.liveProcesses()
-        let probeTime = Date().timeIntervalSince(probeStarted)
-
-        let registry = SessionRegistry.read(livePIDs: Set(processes.map(\.pid)))
         let now = Date()
-        let groups = SessionResolver.resolve(
-            sessions, processes: processes, registry: registry, now: now
-        )
+        let (groups, snapshot) = SessionInventory.groups(now: now)
+        let processes = snapshot.processes
+        let registry = snapshot.registry
+        let scanTime = snapshot.scanTime
+        let probeTime = snapshot.probeTime
 
         for group in groups {
             let open = group.sessions.count(where: \.isLive)
@@ -28,8 +21,10 @@ enum DumpCommand {
             for item in group.sessions {
                 let session = item.session
                 let branch = session.gitBranch.map { " (\($0))" } ?? ""
-                // "registry" means the state came straight from Claude's own report, not a guess.
-                let source = item.live == nil ? "" : "  ·  registry"
+                // How the process was bound: Claude's registry file also carries a self-reported
+                // status; Codex's held writer lock is just as exact but says nothing about
+                // state. Anything else is the top-N guess and prints nothing.
+                let source = item.live != nil ? "  ·  registry" : (item.exactMatch ? "  ·  lock" : "")
                 let waiting = item.waitingFor.map { "  ·  waiting for you: \($0)" } ?? ""
                 print("    [\(item.state.label)] \(session.displayTitle)\(branch)")
                 print("        \(relative(session.lastActivity, from: now))  ·  \(session.id.prefix(8))\(source)\(waiting)")
@@ -45,25 +40,29 @@ enum DumpCommand {
 
         let all = groups.flatMap(\.sessions)
         let states = all.reduce(into: [SessionState: Int]()) { $0[$1.state, default: 0] += 1 }
+        let agents = all.reduce(into: [String: Int]()) { $0[$1.session.agent.label, default: 0] += 1 }
         let hosts = processes.reduce(into: [String: Int]()) { $0[$1.host.displayName, default: 0] += 1 }
         print("""
 
         ── Stats ──────────────────────────────
         sessions        \(all.count) across \(groups.count) project(s)
+        agents          \(agents.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: " · "))
         live processes  \(processes.count) — \(hosts.map { "\($0.key) \($0.value)" }.sorted().joined(separator: " · "))
-        registry        \(registry.count)/\(processes.count) processes registered (rest fall back to guessing)
+        exact binding   \(all.count(where: \.exactMatch))/\(all.count(where: \.isLive)) live sessions \
+        bound exactly, from \(registry.count) registry+lock entries (rest fall back to guessing)
         states          running \(states[.running] ?? 0) · waiting for you \(states[.awaiting] ?? 0) · \
         done \(states[.finished] ?? 0)
         with title      \(all.count { $0.session.title != nil })/\(all.count)
         with summary    \(all.count { $0.session.summary != nil })/\(all.count)
-        time            scan \(ms(scanTime)) + process probe \(ms(probeTime))
+        time            scan \(ms(scanTime)) (Claude \(ms(snapshot.claudeScanTime)) + \
+        Codex \(ms(snapshot.codexScanTime))) + process probe \(ms(probeTime))
         """)
     }
 
     /// Verifies the quality of "next action" extraction. This is exactly the line shown for
     /// every row in the list — get it wrong and the product fails.
     static func verifyNextActions() {
-        let sessions = SessionScanner.scan()
+        let sessions = SessionInventory.collect().sessions
         var pending = 0, clear = 0, unknown = 0, noSummary = 0
         var lengths: [Int] = []
 
@@ -111,13 +110,8 @@ enum DumpCommand {
     /// two independent axes — the inbox currently filters only on the former. This command
     /// checks how badly the two diverge.
     static func triage() {
-        let sessions = SessionScanner.scan()
-        let processes = ProcessProbe.liveProcesses()
-        let registry = SessionRegistry.read(livePIDs: Set(processes.map(\.pid)))
         let now = Date()
-        let items = SessionResolver
-            .resolve(sessions, processes: processes, registry: registry, now: now)
-            .flatMap(\.sessions)
+        let items = SessionInventory.groups(now: now).groups.flatMap(\.sessions)
 
         func bucket(_ item: ResolvedSession) -> String {
             switch item.session.nextAction {

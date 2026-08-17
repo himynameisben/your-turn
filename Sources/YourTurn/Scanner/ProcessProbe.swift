@@ -1,9 +1,14 @@
 import AppKit
 import Foundation
 
-/// A live `claude` process, and which app it's running in.
-struct ClaudeProcess: Sendable, Identifiable {
+/// A live agent process, and which app it's running in.
+struct AgentProcess: Sendable, Identifiable {
     let pid: Int32
+    /// Which binary this is. A session may only ever be matched to a process of its own agent
+    /// — measured why: a lock-less `codex` app-server sits in a real project cwd
+    /// (`/Users/ben/code/ios-app/cat-mine`), so without this the resolver's guessing phase
+    /// would hand it to a Claude session in that same folder and call it live.
+    let agent: Agent
     let cwd: String
     /// Full device path, e.g. `/dev/ttys040`. iTerm / Terminal AppleScript uses this to
     /// locate the tab.
@@ -79,27 +84,35 @@ enum TerminalHost: Sendable, Equatable {
 }
 
 enum ProcessProbe {
-    static func liveProcesses() -> [ClaudeProcess] {
-        let pids = runningClaudePIDs()
-        guard !pids.isEmpty else { return [] }
+    /// One `pgrep` per agent, then a single batched `lsof` and `ps` covering both — the two
+    /// expensive calls stay at one apiece no matter how many agents are installed.
+    static func liveProcesses() -> [AgentProcess] {
+        var agentByPID: [Int32: Agent] = [:]
+        for agent in Agent.allCases {
+            for pid in runningPIDs(named: agent.processName) {
+                if let id = Int32(pid) { agentByPID[id] = agent }
+            }
+        }
+        guard !agentByPID.isEmpty else { return [] }
 
         // Sequential is fine: measured ps eww ~190ms, lsof ~19ms — running them concurrently
         // would only save 19ms, not worth introducing cross-thread synchronization for.
-        let list = pids.joined(separator: ",")
+        let list = agentByPID.keys.map(String.init).joined(separator: ",")
         let cwds = workingDirectories(pidList: list)
         let envs = terminalHosts(pidList: list)
 
         return cwds.compactMap { pid, cwd in
-            ClaudeProcess(
-                pid: pid, cwd: cwd,
+            guard let agent = agentByPID[pid] else { return nil }
+            return AgentProcess(
+                pid: pid, agent: agent, cwd: cwd,
                 tty: envs[pid]?.tty,
                 host: envs[pid]?.host ?? .other(nil)
             )
         }
     }
 
-    private static func runningClaudePIDs() -> [String] {
-        guard let out = Shell.run("/usr/bin/pgrep", ["-x", "claude"]) else { return [] }
+    static func runningPIDs(named name: String) -> [String] {
+        guard let out = Shell.run("/usr/bin/pgrep", ["-x", name]) else { return [] }
         return out.split(whereSeparator: \.isNewline).map(String.init)
     }
 

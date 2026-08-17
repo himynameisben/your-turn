@@ -184,7 +184,7 @@ private struct ActiveRow: View {
                 SpeakerLine(speaker: L("You"), text: youSaid, emphasized: true)
                 if expanded {
                     SpeakerLine(
-                        speaker: "Claude",
+                        speaker: item.session.agent.label,
                         text: summary.text,
                         emphasized: summary.hasSummary,
                         lineLimit: 4
@@ -324,6 +324,20 @@ enum RelativeTime {
         case ..<86400: return L("\(s / 3600)h ago")
         case ..<(7 * 86400): return L("\(s / 86400)d ago")
         default: return L("\(s / (7 * 86400))w ago")
+        }
+    }
+
+    /// The same scale pointed the other way, for the one date in the app that hasn't happened
+    /// yet: when a Codex allowance window resets. `format` measures `now - date` and would
+    /// collapse every future date into "just now" — the reset is always ahead, so it would
+    /// have read "Resets just now" for the entire week.
+    static func until(_ date: Date, from now: Date) -> String {
+        let s = Int(date.timeIntervalSince(now))
+        switch s {
+        case ..<60: return L("any moment")
+        case ..<3600: return L("in \(s / 60)m")
+        case ..<86400: return L("in \(s / 3600)h")
+        default: return L("in \(s / 86400)d")
         }
     }
 }

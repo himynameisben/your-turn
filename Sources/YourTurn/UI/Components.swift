@@ -89,6 +89,29 @@ struct CountBadge: View {
     }
 }
 
+/// Says which agent wrote a session.
+///
+/// Deliberately the quietest thing in the row: an outline rather than a fill, so it can't be
+/// mistaken for the amber `waitingChip` sitting beside it — that one is the whole point of the
+/// app, and this is a label. It is also drawn **only when the list actually holds both agents**
+/// (`SessionStore.showsAgentBadges`); a Claude-only user would otherwise get the same word
+/// stamped down every row of the column, which is noise carrying no information.
+struct AgentBadge: View {
+    let agent: Agent
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        Text(agent.label)
+            .font(Theme.chip)
+            .foregroundStyle(theme.faint)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .overlay(
+                Capsule().strokeBorder(theme.faint.opacity(0.35), lineWidth: 1)
+            )
+    }
+}
+
 /// An `LSUIElement` app's windows open behind other apps by default, and can't be
 /// switched to with Cmd-Tab. While a window is open, temporarily flip the activation
 /// policy to `.regular`, then flip it back to `.accessory` once everything's closed.

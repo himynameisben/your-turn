@@ -186,3 +186,16 @@
 "%@ · nothing" = "%@ · 沒有用量";
 "%@ · %@ tokens · %@" = "%@ · %@ tokens · %@";
 "Totals" = "合計";
+
+/* Codex 額度（用量分頁） */
+"Codex allowance" = "Codex 額度";
+"of your %@ allowance" = "已用掉 %@額度";
+"Resets %@" = "%@重置";
+"measured %@" = "%@測得";
+
+"%lld-day" = "%lld 天";
+"%lld-hour" = "%lld 小時";
+"any moment" = "隨時";
+"in %lldm" = "%lld 分鐘後";
+"in %lldh" = "%lld 小時後";
+"in %lldd" = "%lld 天後";

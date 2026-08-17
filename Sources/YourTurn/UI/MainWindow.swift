@@ -282,7 +282,7 @@ struct MainWindowPage: View {
         } else {
             ForEach(items) { item in
                 GutterRow(label: item.session.projectName) {
-                    SessionLine(item: item, now: now, preferences: preferences)
+                    SessionLine(item: item, now: now, preferences: preferences, showsAgent: store.showsAgentBadges)
                 }
                 Rectangle().fill(theme.rule).frame(height: 1)
             }
@@ -303,7 +303,7 @@ struct MainWindowPage: View {
         } else {
             ForEach(results.prefix(80)) { item in
                 GutterRow(label: item.session.projectName) {
-                    SessionLine(item: item, now: now, preferences: preferences)
+                    SessionLine(item: item, now: now, preferences: preferences, showsAgent: store.showsAgentBadges)
                 }
                 Rectangle().fill(theme.rule).frame(height: 1)
             }
@@ -426,7 +426,7 @@ private struct ProjectBlock: View {
         ) {
             VStack(alignment: .leading, spacing: 16) {
                 ForEach(group.active) { item in
-                    SessionLine(item: item, now: now, preferences: preferences)
+                    SessionLine(item: item, now: now, preferences: preferences, showsAgent: store.showsAgentBadges)
                 }
             }
         }
@@ -516,6 +516,9 @@ struct SessionLine: View {
     let item: ResolvedSession
     let now: Date
     let preferences: AppPreferences
+    /// Passed down rather than read here: it's a property of the whole list, and every row
+    /// has to agree, or the column would show a badge on some rows and not others.
+    var showsAgent = false
 
     @Environment(\.theme) private var theme
     @State private var isHovering = false
@@ -546,8 +549,12 @@ struct SessionLine: View {
                 .font(Theme.sessionTitle)
                 .foregroundStyle(theme.muted)
                 .lineLimit(1)
+            if showsAgent {
+                AgentBadge(agent: item.session.agent)
+            }
             // Only shows up when the registry says it's stuck on a prompt — the only
-            // state where "it won't move until you answer" is true.
+            // state where "it won't move until you answer" is true. Codex never reaches
+            // this: it writes no approval state to disk at all.
             if let waitingFor = item.waitingFor {
                 Chip(text: L("Waiting for you: \(waitingFor)"), tone: theme.waitingChip)
             }
@@ -564,7 +571,7 @@ struct SessionLine: View {
             SpeakerLine(speaker: L("You"), text: you, emphasized: false)
         }
         if let ai = item.actionLine {
-            SpeakerLine(speaker: "Claude", text: ai, emphasized: true)
+            SpeakerLine(speaker: item.session.agent.label, text: ai, emphasized: true)
         }
     }
 

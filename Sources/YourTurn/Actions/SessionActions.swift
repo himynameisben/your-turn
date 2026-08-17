@@ -84,7 +84,7 @@ enum SessionActions {
     }
 
     /// Switches focus to the app the process is running in.
-    private static func focus(_ process: ClaudeProcess, session: Session) {
+    private static func focus(_ process: AgentProcess, session: Session) {
         switch process.host {
         case .iterm:
             AppleScript.run(itermFocusScript(title: session.title, tty: process.tty))
@@ -130,9 +130,15 @@ enum SessionActions {
 
     /// Opens a new terminal window, cds into the project directory, and resumes the session.
     static func resume(_ session: Session, in terminal: TerminalApp) {
-        guard isSafeSessionID(session.id) else { return }
-        let command = "cd \(Shell.quote(session.projectPath)) && claude --resume \(session.id)"
+        guard let command = resumeCommand(session) else { return }
         AppleScript.run(terminal.script(running: command))
+    }
+
+    /// `claude --resume <id>` / `codex resume <id>`, the one place the two CLIs disagree that
+    /// reaches a user-visible action. nil when the id fails its shape check.
+    private static func resumeCommand(_ session: Session) -> String? {
+        guard isSafeSessionID(session.id) else { return nil }
+        return "cd \(Shell.quote(session.projectPath)) && \(session.agent.resumeCommand) \(session.id)"
     }
 
     /// Matches on tab title first, falling back to tty.
@@ -215,7 +221,7 @@ enum SessionActions {
     }
 
     static func copyResumeCommand(_ session: Session) {
-        let command = "cd \(Shell.quote(session.projectPath)) && claude --resume \(session.id)"
+        guard let command = resumeCommand(session) else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(command, forType: .string)
     }
