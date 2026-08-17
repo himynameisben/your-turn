@@ -82,13 +82,13 @@ struct UsageSections: View {
         StatsRow(label: L("Where it goes")) { CostBreakdown(summary: summary) }
         divider
         StatsRow(label: L("Rhythm")) { RhythmBlock(rhythm: summary.rhythm) }
-        // Last of the data rows, and only for people who run Codex. It sits apart from
-        // everything above because it is a different kind of fact: every other row on this page
-        // is money reconstructed from tokens, and this one is an allowance on a clock. Putting
-        // a percentage inside the cost breakdown would invite reading it as a share of spend.
-        if let quota = store.codexQuota {
+        // Last of the data rows, and only for people who have an allowance to show. It sits apart
+        // from everything above because it is a different kind of fact: every other row on this
+        // page is money reconstructed from tokens, and these are allowances on a clock. Putting a
+        // percentage inside the cost breakdown would invite reading it as a share of spend.
+        if !store.quotas.isEmpty {
             divider
-            StatsRow(label: L("Codex allowance")) { CodexQuotaBlock(quota: quota, now: now) }
+            StatsRow(label: L("Allowance")) { AllowanceBlock(quotas: store.quotas, now: now) }
         }
         divider
         StatsRow(label: nil) { Provenance(store: store, summary: summary) }
@@ -229,53 +229,82 @@ private struct PeriodPicker: View {
 /// question is "how am I doing right now" (today / this week / this month), but once you've
 /// picked March the answer to "this month" is irrelevant — what you want is the shape of
 /// March itself.
-/// Codex's allowance: one number and one clock.
+/// Every allowance on one spine: up to two Claude windows and one Codex window.
 ///
-/// A bar rather than another `Theme.display` figure, because it is the one quantity on this
-/// page with a ceiling — every dollar total above it can always go up, and a percentage cannot.
-/// Drawing it in the same typeface as spend would say they're the same kind of number.
-private struct CodexQuotaBlock: View {
-    let quota: CodexQuota
+/// Bars rather than `Theme.display` figures, because these are the only quantities on the page
+/// with a ceiling — every dollar total above can always go up, and a percentage cannot. Drawing
+/// them in the same typeface as spend would say they were the same kind of number. And a table
+/// rather than one big number apiece: three stacked hero figures would be three answers to a
+/// question nobody asked in triplicate.
+private struct AllowanceBlock: View {
+    let quotas: [AgentQuota]
+    let now: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            ForEach(quotas) { AllowanceBar(quota: $0, now: now) }
+        }
+    }
+}
+
+private struct AllowanceBar: View {
+    let quota: AgentQuota
     let now: Date
 
     @Environment(\.theme) private var theme
 
-    private var fraction: Double { min(max(quota.usedPercent / 100, 0), 1) }
+    private var fraction: Double { quota.remainingPercent / 100 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(StatsFormat.percentUsed(quota.usedPercent))
-                    .font(Theme.display)
-                    .foregroundStyle(theme.text)
-                Text(L("of your \(quota.windowLabel) allowance"))
-                    .font(Theme.meta)
-                    .foregroundStyle(theme.muted)
-            }
+        HStack(spacing: 12) {
+            // Product name plus window, never translated on the agent half — "Claude · 7-day".
+            Text("\(quota.agent.label) · \(quota.windowLabel)")
+                .font(Theme.meta)
+                .foregroundStyle(theme.muted)
+                .lineLimit(1)
+                .frame(width: 108, alignment: .leading)
+
+            // The bar drains rather than fills. Both agents report what's been *used*, and this
+            // is the one place the app deliberately says it the other way round — the fuel-gauge
+            // reading is the one you can act on.
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(theme.rule)
                     Capsule()
-                        .fill(theme.waitingChip.fg)
+                        .fill(quota.isLow ? theme.waitingChip.fg : Theme.dotRunning)
                         .frame(width: max(2, geo.size.width * fraction))
                 }
             }
             .frame(height: 6)
-            .frame(maxWidth: 320)
+            .frame(maxWidth: 170)
+
+            Text(L("\(StatsFormat.percentUsed(quota.remainingPercent)) left"))
+                .font(Theme.meta)
+                .foregroundStyle(theme.text)
+                .lineLimit(1)
+                .frame(width: 76, alignment: .leading)
+
             Text(footnote)
                 .font(Theme.meta)
                 .foregroundStyle(theme.faint)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
         }
     }
 
-    /// Says when it was measured as well as when it resets. The reading is lifted from the last
-    /// turn of your most recent thread, so a week away from Codex leaves a week-old number —
-    /// and a stale percentage presented as current is the one way this row could mislead.
+    /// When it resets, plus when it was *measured* — but the second half only once the reading
+    /// has some age on it. Neither agent is queried live: Codex's comes off the last turn on
+    /// disk and Claude's off the last status-line render, so stepping away from an agent leaves
+    /// its number frozen. A stale percentage presented as current is the one way this row could
+    /// mislead, and an "measured 2m ago" on every fresh reading is noise that trains you to stop
+    /// reading it. One hour is the line: shorter than any of these windows, longer than a break.
     private var footnote: String {
-        let reset = quota.resetsAt.map {
-            L("Resets \(RelativeTime.until($0, from: now))")
-        }
-        let measured = L("measured \(RelativeTime.format(quota.observedAt, from: now))")
+        let reset = quota.resetsAt.map { L("Resets \(RelativeTime.until($0, from: now))") }
+        let age = now.timeIntervalSince(quota.observedAt)
+        let measured = age > 3600
+            ? L("measured \(RelativeTime.format(quota.observedAt, from: now))")
+            : nil
         return [reset, measured].compactMap { $0 }.joined(separator: " · ")
     }
 }

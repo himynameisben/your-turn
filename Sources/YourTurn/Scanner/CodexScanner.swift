@@ -88,16 +88,42 @@ struct ThreadRow: Sendable {
 private struct StateDB {
     let handle: OpaquePointer
 
+    /// Read-only first, and `immutable=1` as the fallback — measured, without the fallback the
+    /// whole Codex half of the app vanishes whenever Codex isn't running.
+    ///
+    /// `state_5.sqlite` is a WAL database. A WAL reader needs the `-shm` shared-memory file, and
+    /// a `SQLITE_OPEN_READONLY` connection will not create one, so the first query fails with
+    /// `SQLITE_CANTOPEN` and the scan quietly reports zero threads. Measured on this machine:
+    /// 49 threads with a live Codex holding the `-shm` open, **0** the moment it exits and macOS
+    /// cleans the file up. The old code read that as "no Codex sessions", which is the same
+    /// answer it gives for a schema it doesn't recognise — a fallback path swallowing the most
+    /// ordinary case there is.
+    ///
+    /// `immutable=1` skips the WAL entirely, which is unsafe against a concurrent writer and
+    /// safe here for the reason that triggers it: this path is only reached because the ordinary
+    /// open failed, and it only fails when nothing else holds the database open. A live Codex
+    /// creates the `-shm`, and then the first attempt succeeds. The cost when Codex quit without
+    /// checkpointing is missing the last few uncommitted threads, which beats missing all of them.
     static func open() -> StateDB? {
         guard let path = newestStateFile() else { return nil }
-        var handle: OpaquePointer?
         // SQLITE_OPEN_URI is what makes the `file:` prefix meaningful; without it the whole
         // string is taken as a literal filename.
-        let ok = sqlite3_open_v2(
-            "file:\(path)?mode=ro", &handle, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil
-        ) == SQLITE_OK
-        guard ok, let handle else {
+        if let db = connect("file:\(path)?mode=ro") { return db }
+        return connect("file:\(path)?immutable=1")
+    }
+
+    /// `sqlite3_open_v2` succeeds lazily — it doesn't touch the file — so the connection is only
+    /// worth anything once a real read has come back off it.
+    private static func connect(_ uri: String) -> StateDB? {
+        var handle: OpaquePointer?
+        guard sqlite3_open_v2(uri, &handle, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil) == SQLITE_OK,
+              let handle
+        else {
             if let handle { sqlite3_close(handle) }
+            return nil
+        }
+        guard sqlite3_exec(handle, "SELECT 1 FROM threads LIMIT 1", nil, nil, nil) == SQLITE_OK else {
+            sqlite3_close(handle)
             return nil
         }
         return StateDB(handle: handle)

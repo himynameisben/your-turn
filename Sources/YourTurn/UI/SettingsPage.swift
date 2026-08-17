@@ -20,6 +20,12 @@ struct SettingsPage: View {
     @Environment(\.theme) private var theme
     @Environment(\.isOffscreenRender) private var isOffscreenRender
 
+    /// Re-read on every appearance rather than stored — `~/.claude/settings.json` belongs to
+    /// Claude Code, and a remembered `true` would go on claiming the bridge was installed after
+    /// somebody edited it back out by hand.
+    @State private var bridge = StatusLineBridge.State.off
+    @State private var bridgeFailure: String?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SettingRow(label: L("Appearance"), note: appearanceNote) {
@@ -85,6 +91,21 @@ struct SettingsPage: View {
             }
             rule
 
+            SettingRow(label: L("Claude allowance"), note: allowanceNote) {
+                HStack(spacing: 12) {
+                    if isOffscreenRender {
+                        StaticValue(text: bridgeIsOn ? L("On") : L("Off"))
+                    } else {
+                        // The setter is wrapped in a closure rather than passed as `set: setBridge`:
+                        // the method reference makes swiftc 6.2.4 abort in IRGen while emitting the
+                        // reabstraction thunk for it.
+                        Toggle("", isOn: Binding(get: { bridgeIsOn }, set: { setBridge($0) }))
+                            .labelsHidden()
+                    }
+                }
+            }
+            rule
+
             SettingRow(label: L("Archive"), note: L("Archiving is stored only in Your Turn's own data — never written back to ~/.claude.")) {
                 HStack(spacing: 12) {
                     Text(archiveSummary)
@@ -114,8 +135,42 @@ struct SettingsPage: View {
             about
         }
         // The login item can be switched off in System Settings while the app is elsewhere, so
-        // the switch is re-read every time this tab comes up rather than trusted.
-        .onAppear { preferences.launchAtLogin.refresh() }
+        // the switch is re-read every time this tab comes up rather than trusted. `settings.json`
+        // is somebody else's file for exactly the same reason, so it gets re-read here too.
+        .onAppear {
+            preferences.launchAtLogin.refresh()
+            bridge = StatusLineBridge.state()
+        }
+    }
+
+    private var bridgeIsOn: Bool { if case .on = bridge { return true } else { return false } }
+
+    private func setBridge(_ enabled: Bool) {
+        bridgeFailure = nil
+        do {
+            try enabled ? StatusLineBridge.enable() : StatusLineBridge.disable()
+        } catch {
+            bridgeFailure = error.localizedDescription
+        }
+        bridge = StatusLineBridge.state()
+    }
+
+    /// Says what the switch will do to somebody else's file *before* it does it, and what it did
+    /// afterwards. The chained case gets its own sentence because "we edited your settings and
+    /// your status line still works" is not something anyone should have to verify by hand.
+    private var allowanceNote: String {
+        if let bridgeFailure { return bridgeFailure }
+        switch bridge {
+        case .off:
+            return L("Your 5-hour and weekly limits, read from Claude Code's status line — the only place it publishes them. Switching this on writes one key (statusLine) into ~/.claude/settings.json, and that is the only thing Your Turn ever writes there.")
+        case .foreign:
+            return L("You already have a status line. Switching this on keeps it: Your Turn's bridge runs first and hands it the same input untouched.")
+        case .on(let chained):
+            let where_ = chained == nil
+                ? L("Claude Code's status line now shows what's left, and Your Turn reads it from there.")
+                : L("Chained to the status line you already had, which still runs and still prints its own line.")
+            return where_ + " " + L("The numbers arrive after Claude Code's next reply.")
+        }
     }
 
     private var rule: some View {
@@ -181,7 +236,7 @@ struct SettingsPage: View {
     }
 
     private var about: some View {
-        SettingRow(label: L("About"), note: L("Reads session records from ~/.claude — read-only, never written to.")) {
+        SettingRow(label: L("About"), note: L("Reads session records from ~/.claude — read-only, apart from the status-line bridge you switch on yourself.")) {
             VStack(alignment: .leading, spacing: 7) {
                 Text(Self.appName)
                     .font(Theme.sessionTitle)

@@ -90,6 +90,61 @@ enum CostCommand {
         busiest hour    \(rhythm.busiestHour.map { "\($0):00" } ?? "—")
         """)
         print("  hours " + histogram(rhythm.byHour))
+        allowance()
+    }
+
+    /// The one part of the Usage tab that isn't money, and until now the one part `--cost`
+    /// couldn't check. Both readings are cheap — a single file for Claude, a handful of tail
+    /// reads for Codex — so this costs nothing next to the scan above.
+    ///
+    /// It prints the reason for an empty section rather than an empty section: "no reading"
+    /// means the status-line bridge is off (or Claude Code hasn't replied since it went on),
+    /// which is a different problem from a bridge that's on and returning nothing.
+    private static func allowance() {
+        let quotas = ClaudeQuotaReader.read() + CodexQuotaReader.read(sessions: CodexScanner.scan())
+        print("\n── Allowance ──────────────────────────")
+        let bridge: String
+        switch StatusLineBridge.state() {
+        case .off: bridge = "off"
+        case .on(let chained): bridge = chained == nil ? "on" : "on, chained to \(chained!)"
+        case .foreign(let command): bridge = "another status line is installed: \(command)"
+        }
+        print("status-line bridge  \(bridge)")
+        guard !quotas.isEmpty else {
+            print("  no reading")
+            return
+        }
+        let now = Date()
+        for quota in quotas {
+            let reset = quota.resetsAt.map { ahead($0, from: now) } ?? "—"
+            print("  \(pad(quota.agent.label, 8))\(pad(window(quota.windowMinutes), 9))"
+                + "\(pad(StatsFormat.percentUsed(quota.remainingPercent) + " left", 12))"
+                + "resets in \(pad(reset, 8))"
+                + "measured \(ago(quota.observedAt, from: now)) ago")
+        }
+    }
+
+    // English, like the rest of this file: `AgentQuota.windowLabel` and `RelativeTime` both go
+    // through `L()`, and a dump whose columns change language with the machine can't be grepped.
+    private static func window(_ minutes: Int) -> String {
+        minutes >= 1440 ? "\(minutes / 1440)-day" : "\(max(1, minutes / 60))-hour"
+    }
+
+    private static func ago(_ date: Date, from now: Date) -> String {
+        elapsed(Int(now.timeIntervalSince(date)))
+    }
+
+    private static func ahead(_ date: Date, from now: Date) -> String {
+        elapsed(Int(date.timeIntervalSince(now)))
+    }
+
+    private static func elapsed(_ seconds: Int) -> String {
+        switch seconds {
+        case ..<60: "\(max(0, seconds))s"
+        case ..<3600: "\(seconds / 60)m"
+        case ..<86400: "\(seconds / 3600)h"
+        default: "\(seconds / 86400)d"
+        }
     }
 
     /// `run()` is a plain synchronous entry point called before any scene exists, so the async

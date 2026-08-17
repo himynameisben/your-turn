@@ -247,7 +247,7 @@ enum RenderCommand {
         let stats = StatsStore()
         stats.period = period
         guard !demo else {
-            stats.loadDemo(DemoData.usage(now: Date()), quota: DemoData.quota(now: Date()))
+            stats.loadDemo(DemoData.usage(now: Date()), quotas: DemoData.quotas(now: Date()))
             return stats
         }
         var done = false
@@ -289,14 +289,28 @@ enum RenderCommand {
 /// of hardcoding the line the UI ends up showing.
 private enum DemoData {
     /// Invented, like everything else here — a real reading would publish how much of someone's
-    /// actual Codex allowance they've burned this week.
-    static func quota(now: Date) -> CodexQuota {
-        CodexQuota(
-            usedPercent: 46,
-            windowMinutes: 10080,
-            resetsAt: now.addingTimeInterval(3.2 * 86_400),
-            observedAt: now.addingTimeInterval(-12 * 60)
-        )
+    /// actual allowance they've burned this week.
+    ///
+    /// All three rows, and one of them below the 20% line, because the amber bar is a state a
+    /// screenshot of a comfortable week would never show.
+    static func quotas(now: Date) -> [AgentQuota] {
+        [
+            AgentQuota(
+                agent: .claude, usedPercent: 38, windowMinutes: 5 * 60,
+                resetsAt: now.addingTimeInterval(2.4 * 3600),
+                observedAt: now.addingTimeInterval(-4 * 60)
+            ),
+            AgentQuota(
+                agent: .claude, usedPercent: 84, windowMinutes: 7 * 24 * 60,
+                resetsAt: now.addingTimeInterval(1.6 * 86_400),
+                observedAt: now.addingTimeInterval(-4 * 60)
+            ),
+            AgentQuota(
+                agent: .codex, usedPercent: 46, windowMinutes: 10080,
+                resetsAt: now.addingTimeInterval(3.2 * 86_400),
+                observedAt: now.addingTimeInterval(-12 * 60)
+            ),
+        ]
     }
 
     static func groups(now: Date) -> [ProjectGroup] {
