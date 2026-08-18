@@ -158,10 +158,13 @@ enum RenderCommand {
         // pushed them back. That loop ran at refresh rate and repainted the whole page each time.
         // A frame of the resting state alone could never have shown it.
         let quotas = DemoData.quotas(now: Date())
+        // Through the same formatter the window uses, so this frame is in the rendered
+        // language too — it used to carry an English dateline into every zh-Hant shot.
+        let kickerDate = MastheadKicker.dateline(for: Date())
         let hover = VStack(alignment: .leading, spacing: 26) {
-            MastheadKicker(dateline: "August 17 · Monday", quotas: quotas, now: Date()) { _ in }
+            MastheadKicker(dateline: kickerDate, quotas: quotas, now: Date()) { _ in }
             MastheadKicker(
-                dateline: "August 17 · Monday", quotas: quotas, now: Date(), onSelect: { _ in },
+                dateline: kickerDate, quotas: quotas, now: Date(), onSelect: { _ in },
                 initialHover: .quota(quotas[1])
             )
         }
@@ -391,7 +394,7 @@ private enum DemoData {
 
     static func groups(now: Date) -> [ProjectGroup] {
         [
-            group("weather-cli", [
+            group("is-it-raining", [
                 item(
                     title: "Add a --units flag",
                     you: "Add a --units flag so I can switch between celsius and fahrenheit",
@@ -415,7 +418,7 @@ private enum DemoData {
                     now: now
                 ),
             ]),
-            group("recipe-box", [
+            group("fridge-forensics", [
                 item(
                     title: "Import from the Paprika export",
                     you: "Can you pull my Paprika export into the new schema?",
@@ -430,7 +433,7 @@ private enum DemoData {
                     now: now
                 ),
             ]),
-            group("docs-site", [
+            group("docs-nobody-reads", [
                 item(
                     title: "Fix the broken sidebar anchors",
                     you: "Every anchor in the sidebar 404s on versioned pages — find out why",
@@ -462,7 +465,7 @@ private enum DemoData {
                     agent: .codex
                 ),
             ]),
-            group("budget-tracker", [
+            group("where-did-it-all-go", [
                 item(
                     title: "Split the CSV importer into two passes",
                     you: "Split the importer so parsing and categorising aren't in the same loop",
@@ -473,7 +476,7 @@ private enum DemoData {
                     now: now
                 ),
             ]),
-            group("side-project", [
+            group("weekend-project", [
                 item(
                     title: "Sketch the onboarding flow",
                     you: "What would a three-screen onboarding look like for this?",
@@ -507,7 +510,8 @@ private enum DemoData {
 
         // Weighted so one project clearly leads — a flat distribution would hide whether the
         // ranked bars actually rank anything.
-        let projects = [("weather-cli", 5), ("recipe-box", 3), ("docs-site", 2), ("ledger", 1)]
+        let projects = [("is-it-raining", 5), ("fridge-forensics", 3),
+                        ("docs-nobody-reads", 2), ("where-did-it-all-go", 1)]
         let models = [("claude-opus-5", 6), ("claude-sonnet-5", 3), ("claude-fable-5", 1)]
         let weighted: [(String, String)] = projects.flatMap { project, weight in
             (0..<weight).map { _ in project }

@@ -602,11 +602,17 @@ stored preference**: once Settings → Language is set to anything but Follow Sy
 and a machine with the preference pinned to zh-Hant renders Chinese no matter what
 `-AppleLanguages` says.
 
-`docs/screenshots/` stays English. The main-window and usage shots are rendered with
-`-language en`; the `*-settings.png` ones are **deliberately not regenerated that way**,
-because the language pill would then show "English" selected instead of the "Follow System"
-a new user actually sees. Regenerate those only on a machine whose system language is English
-and whose preference is still Follow System.
+`docs/screenshots/` is the English set and `docs/screenshots/zh-Hant/` the four frames
+`README.zh-TW.md` points at — a translated README illustrated with an English window is
+showing the reader someone else's app. Both come from the same `--demo` scan, so the two
+sets differ only in the language flag. The `*-settings.png` ones are **deliberately not
+regenerated with `-language en`**, because the language pill would then show "English"
+selected instead of the "Follow System" a new user actually sees. Regenerate those only on
+a machine whose system language is English and whose preference is still Follow System.
+
+`MastheadKicker.dateline(for:)` is shared with `--render` for this reason: the hover frame
+built its own dateline as a literal, so every Chinese screenshot of it carried
+"August 17 · Monday". Nothing in a rendered frame may hardcode a user-visible string.
 
 ## Conventions
 
