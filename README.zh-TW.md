@@ -11,7 +11,7 @@ Your Turn 不跑 LLM、不讀對話內容、沒有任何數據收集，透過本
 
 [English](README.md) | 繁體中文
 
-![Your Turn 主視窗](docs/screenshots/light.png)
+![Your Turn 主視窗](docs/screenshots/zh-Hant/light.png)
 
 ## 現在輪到誰？
 
@@ -28,7 +28,7 @@ VS Code、Cursor、Windsurf、Zed 會切到正確的視窗。已經結束的 ses
 
 ## 這陣子到底在忙什麼？
 
-![用量分頁](docs/screenshots/light-usage.png)
+![用量分頁](docs/screenshots/zh-Hant/light-usage.png)
 
 用量分頁回答的是自己回想不起來的事：**這週的時間被哪些專案吃掉、哪一個燒掉最多
 token。** 選一個月或一週，整頁就跟著縮到那段期間。
@@ -41,7 +41,7 @@ Codex 的費用暫時還不支援，那邊只看額度。
 
 ### token 版的貢獻熱度圖
 
-![縮到單一月份](docs/screenshots/light-usage-month.png)
+![縮到單一月份](docs/screenshots/zh-Hant/light-usage-month.png)
 
 一格一天，深淺代表那天用得多兇。點任一格、或用箭頭前後翻，整頁就縮到那個月或那一週。
 
@@ -55,7 +55,7 @@ Claude Code 和 Codex 各自把紀錄存在自己的地方，格式也完全不�
 
 ## 還剩多少？
 
-![額度環：靜止，以及滑上去之後](docs/screenshots/light-allowance-hover.png)
+![額度環：靜止，以及滑上去之後](docs/screenshots/zh-Hant/light-allowance-hover.png)
 
 視窗標頭上有三顆環：Claude Code 的 5 小時與每週視窗，加上 Codex 的每週視窗。滑上去看
 讀數，用量分頁上是同樣三條、但有標籤。

@@ -241,17 +241,7 @@ struct MainWindowPage: View {
         }
     }
 
-    private var dateline: String {
-        let f = DateFormatter()
-        // Follows the language the UI resolved to, not `Locale.current`: an English UI on a
-        // Taiwanese machine must not print a weekday as "星期二" under an English headline.
-        f.locale = Localization.locale
-        // The pattern is translated too — it renders as "July 28 · Tuesday" in en and
-        // "7月28日 · 星期二" in zh-Hant, which is not a reordering of the same fields, so a
-        // single format string can't serve both.
-        f.dateFormat = L("dateline.format")
-        return f.string(from: now)
-    }
+    private var dateline: String { MastheadKicker.dateline(for: now) }
 
     private var searchField: some View {
         HStack(spacing: 6) {
@@ -367,6 +357,20 @@ struct MainWindowPage: View {
 /// running at refresh rate, repainting everything each time round: it beachballed. Nothing before
 /// the rings changes size now, so nothing can move them.
 struct MastheadKicker: View {
+    /// Shared with `--render`, which used to hardcode an English dateline and so rendered
+    /// "August 17 · Monday" into the Chinese screenshots.
+    static func dateline(for date: Date) -> String {
+        let f = DateFormatter()
+        // Follows the language the UI resolved to, not `Locale.current`: an English UI on a
+        // Taiwanese machine must not print a weekday as "星期二" under an English headline.
+        f.locale = Localization.locale
+        // The pattern is translated too — it renders as "July 28 · Tuesday" in en and
+        // "7月28日 · 星期二" in zh-Hant, which is not a reordering of the same fields, so a
+        // single format string can't serve both.
+        f.dateFormat = L("dateline.format")
+        return f.string(from: date)
+    }
+
     let dateline: String
     let quotas: [AgentQuota]
     let now: Date
