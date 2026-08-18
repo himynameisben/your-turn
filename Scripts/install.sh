@@ -2,7 +2,7 @@
 # Build a release .app and install it into /Applications, replacing what's there.
 #
 #   ./Scripts/install.sh          # whatever version bundle.sh defaults to
-#   ./Scripts/install.sh 0.3.0    # stamp a specific version into Info.plist
+#   ./Scripts/install.sh 0.4.0    # stamp a specific version into Info.plist
 #   DEST=~/Applications/YourTurn.app ./Scripts/install.sh
 #
 # This is the "put it on my own Mac" path: an ad-hoc signature is all a bundle that
