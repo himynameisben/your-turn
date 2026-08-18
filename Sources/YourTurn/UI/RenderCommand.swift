@@ -34,7 +34,7 @@ enum RenderCommand {
             // update notice's layout only exists to look at under --demo.
             updates.loadDemo(
                 UpdateCheck.Release(
-                    version: "0.3.0",
+                    version: "0.4.1",
                     page: URL(string: "https://github.com/himynameisben/your-turn/releases/latest")!
                 )
             )
